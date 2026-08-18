@@ -87,7 +87,39 @@
         .status-msg { text-align: center; margin-top: 15px; font-weight: bold; color: #dc3545; }
 
          .visitor-counter { margin-top: 30px; padding-top: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-       
+
+        /* ستايل زر الصعود للأعلى */
+        #scrollTopBtn {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+            background-color: #008e7e;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.3s ease;
+            z-index: 9999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #scrollTopBtn:hover {
+            background-color: #006d60;
+            transform: translateY(-5px);
+            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        }
+        #scrollTopBtn.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        
         /* ستايل النافذة المنبثقة للجدول العرضي */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 100000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
 .modal-box { background: #f4f9f8; border-radius: 12px; padding: 25px; max-width: 1700px; width: 95%; max-height: 95vh; overflow: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 2px solid #008e7e; }
@@ -888,6 +920,24 @@
         document.getElementById('schedule-modal').style.display = 'none';
         document.body.style.overflow = '';
     }
+    // إظهار/إخفاء زر الصعود للأعلى بذكاء عند التمرير
+    window.onscroll = function() {
+        let scrollBtn = document.getElementById("scrollTopBtn");
+        // يظهر الزر إذا نزل المستخدم للأسفل بمقدار 200 بكسل
+        if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
+            scrollBtn.classList.add("show");
+        } else {
+            scrollBtn.classList.remove("show");
+        }
+    };
+
+    // دالة الصعود للأعلى 
+    function scrollToTop() {
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth' // صعود ناعم وليس قفزاً
+        });
+    }
 </script>
 
     <!-- نافذة عرض الجدول العرضي -->
@@ -898,5 +948,6 @@
         <div id="modal-content-area"></div>
     </div>
 </div>
+        <button id="scrollTopBtn" onclick="scrollToTop()" title="العودة للأعلى">⬆️</button>
 </body>
 </html>

@@ -88,6 +88,9 @@
 
          .visitor-counter { margin-top: 30px; padding-top: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
+         .youtube-btn {position: absolute;top: 15px; left: 15px;width: 50px; height: 50px; background: #FF0000; border-radius: 50%; display: flex; justify-content: center; align-items: center; text-decoration: none; box-shadow: 0 4px 10px rgba(0,0,0,.2); transition: all .25s ease;}
+        .youtube-btn:hover { transform: scale(1.1); background: #cc0000; }
+        
         /* ستايل زر الصعود للأعلى */
         #scrollToTopBtn {
             position: fixed;
@@ -138,6 +141,11 @@
 
     <!-- ==================== الصفحة الأولى: إعداد الملفات ==================== -->
     <div id="page-1" class="page active">
+            <a href="https://youtu.be/Em6gGK-qBLI" target="_blank" class="youtube-btn" title="لمشاهدة الشرح">
+        <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white">
+            <path d="M23.5 6.2c-.3-1.2-1.2-2.1-2.4-2.4C19 3.2 12 3.2 12 3.2s-7 0-9.1.6C1.7 4.1.8 5 .5 6.2 0 8.3 0 12 0 12s0 3.7.5 5.8c.3 1.2 1.2 2.1 2.4 2.4C5 20.8 12 20.8 12 20.8s7 0 9.1-.6c1.2-.3 2.1-1.2 2.4-2.4.5-2.1.5-5.8.5-5.8s0-3.7-.5-5.8zM9.6 15.5V8.5L15.8 12l-6.2 3.5z"/>
+        </svg>
+    </a>
         <h1>إسناد جداول المستجدين (نظام الرزم)</h1>
         
         <details class="advanced-settings">
@@ -796,8 +804,18 @@ function savePhysicsSetting() {
                 }
                 else {
                     if (planData) {
-                        let requiredParts = planData.requiredParts; 
-                        
+                        // حساب إجمالي الشعب المطلوبة ديناميكياً لتحديث استثناء الفيزياء
+                        let requiredParts = 0;
+                        Array.from(planData.courses).forEach(planCourse => {
+                            let normPlanCourse = normalizeCode(planCourse);
+                            let req = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+                            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+                            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
+                                req = 1;
+                            }
+                            requiredParts += req;
+                        });
+
                         // تجهيز المتغيرات للنافذة المنبثقة
                         let strCrnsEscaped = JSON.stringify(st.assignedCRNs || []).replace(/"/g, '&quot;');
                         let programEscaped = (st.program || '').replace(/"/g, '&quot;');

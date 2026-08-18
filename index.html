@@ -858,17 +858,30 @@ function savePhysicsSetting() {
                         let badgeHover = "onmouseover=\"this.style.transform='scale(1.05)'; this.style.opacity='0.9';\" onmouseout=\"this.style.transform='scale(1)'; this.style.opacity='1';\"";
                         let clickAction = `onclick="openPlanModal('${studentNameEscaped}', '${programEscaped}', ${strCrnsEscaped})" title="انقر لعرض تفاصيل المقررات"`;
 
-                        let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب دخيلة</span>` : '';
+                       let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب دخيلة</span>` : '';
+
+                        // فحص السعة لتنبيه الجدول الخارجي
+                        let capacityWarning = '';
+                        if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+                            let hasCapacityIssue = st.assignedCRNs.some(crn => {
+                                let c = String(crn).trim();
+                                return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
+                            });
+                            
+                            if (hasCapacityIssue) {
+                                capacityWarning = `<br><span style="font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 تجاوز السعة</span>`;
+                            }
+                        }
 
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
                         else if (validStudentPartsCount === requiredParts && !hasUnmapped) {
-                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة)</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${capacityWarning}</td>`;
                         } else if (validStudentPartsCount < requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning}</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}</td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning}</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}</td>`;
                         }
                     } else {
                         planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;

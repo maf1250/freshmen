@@ -688,8 +688,8 @@ function savePhysicsSetting() {
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>رقم المتدرب</th>
-                        <th>اسم المتدرب</th>
+                        <th>الرقم</th>
+                        <th>الاسم</th>
                         <th>الرزمة</th>
                         <th>الأرقام المرجعية</th>
                         <th>الساعات</th>
@@ -964,7 +964,7 @@ function savePhysicsSetting() {
 
     function openScheduleModal(studentName, crnsArray) {
         if (!crnsArray || crnsArray.length === 0) return;
-        document.getElementById('modal-title').innerText = `الجدول العرضي: ${studentName}`;
+        document.getElementById('modal-title').innerText = `جدول: ${studentName}`;
         const content = document.getElementById('modal-content-area');
         
         let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
@@ -1214,7 +1214,7 @@ function savePhysicsSetting() {
         if (unmappedCRNs.length > 0) {
             html += `<div style="margin-top:15px; padding:12px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px; text-align:right;">
                         <strong style="color:#856404; font-size:14px;">⚠️ تنبيه إداري هام:</strong><br>
-                        <span style="color:#856404; font-size:13px;">تم إسناد أرقام مرجعية لهذا المتدرب بالخطأ لا تتبع لخطة المستوى الأول، وهي:</span>
+                        <span style="color:#856404; font-size:13px;">تم إسناد أرقام مرجعية لا تتبع لخطة المستوى الأول، وهي:</span>
                         <ul style="color:#856404; margin-top:5px; margin-bottom:0; font-size:13px; font-weight:bold;">`;
             unmappedCRNs.forEach(u => {
                 html += `<li>[${u.crn}] : ${u.name}</li>`;
@@ -1238,7 +1238,7 @@ function savePhysicsSetting() {
 <div id="schedule-modal" class="modal-overlay" onclick="closeScheduleModal(event)">
     <div class="modal-box" onclick="event.stopPropagation()">
         <button class="modal-close" onclick="closeScheduleModal(event)">✖</button>
-        <h2 id="modal-title" style="text-align:center; color:#006d60; margin-top:0; border-bottom: 2px dashed #b2d8d3; padding-bottom: 10px;">جدول المتدرب</h2>
+        <h2 id="modal-title" style="text-align:center; color:#006d60; margin-top:0; border-bottom: 2px dashed #b2d8d3; padding-bottom: 10px;">الجدول</h2>
         <div id="modal-content-area"></div>
     </div>
 </div>

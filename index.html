@@ -224,6 +224,7 @@
     let uniquePrograms = [];
     let packagesData = [];
     let dynamicSC04Plan = {};
+    let isSc04Attached = false;
     // دوال قراءة الملفات
     function readExcelFile(file) {
         return new Promise((resolve, reject) => {
@@ -311,11 +312,12 @@ globalCRNDetails = {};
             });
         }
 
-        // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول
-       // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
+// معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
         const sc04File = document.getElementById('sc04File').files[0];
         dynamicSC04Plan = {};
-        if (sc04File) {
+        isSc04Attached = !!sc04File; // حفظ حالة إرفاق الملف
+
+        if (isSc04Attached) {
             let rawSC04 = await readExcelFile(sc04File);
             const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
             const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
@@ -324,15 +326,13 @@ globalCRNDetails = {};
                 let prog = row[colProgSc04] || row['التخصص'];
                 let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
                 
-                // --- الكود الذكي لحل مشكلة تكرار عمود "الفصل التدريبي" ---
                 let isLevel1 = false;
-                // نستخرج كل الأعمدة التي يحتوي اسمها على كلمة "الفصل"
                 let semKeys = Object.keys(row).filter(k => k.includes('الفصل'));
                 
                 for (let key of semKeys) {
                     let val = String(row[key]).trim();
-                    // نتأكد أن القيمة هي "الفصل التدريبي 1" وليست الفصل الزمني 144710
-                    if ((val.includes('الفصل التدريبي 1') || val === '1' || val.includes('الفصل الأول')) && !val.startsWith('144')) {
+                    // ذكاء إضافي: يبحث عن 1، أو ١ (بالعربي)، أو أول، أو اول.. ويتجاهل الفصول الزمنية (144)
+                    if ((val.includes('1') || val.includes('١') || val.includes('أول') || val.includes('اول')) && !val.startsWith('144')) {
                         isLevel1 = true;
                         break;
                     }
@@ -347,7 +347,6 @@ globalCRNDetails = {};
                 }
             });
             
-            // تحويل Set إلى رقم يعبر عن عدد المقررات المطلوبة لكل تخصص
             for (let p in dynamicSC04Plan) {
                 dynamicSC04Plan[p] = dynamicSC04Plan[p].size;
             }
@@ -591,7 +590,7 @@ function loadPackagesFromLocal() {
             container.innerHTML = '<div style="text-align:center; padding:30px; font-weight:bold; color:#666;">لا يوجد متدربين في هذا التصنيف.</div>';
             return;
         }
-
+// إضافة رأس العمود الناقص
     let tableHTML = `
             <table class="data-table">
                 <thead>
@@ -601,13 +600,14 @@ function loadPackagesFromLocal() {
                         <th>الرزمة</th>
                         <th>الأرقام المرجعية</th>
                         <th>الساعات</th>
+                        <th>حالة الخطة (SC04)</th>
                         <th>الجدول الزمني</th>
                     </tr>
                 </thead>
                 <tbody>
         `;
 
-       filteredTrainees.forEach(st => {
+        filteredTrainees.forEach(st => {
             let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند</span>`;
             let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
                 st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') : '-';
@@ -617,7 +617,7 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-            // 1. أولاً: حساب الساعات المعتمدة للمتدرب وحصر المقررات (يجب أن يتم أولاً)
+            // 1. حساب الساعات المعتمدة وحصر المقررات
             let totalHours = 0;
             let countedCourses = new Set();
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
@@ -625,7 +625,6 @@ function loadPackagesFromLocal() {
                     let crnClean = crn.trim();
                     if (globalCRNDetails[crnClean]) {
                         let courseCode = globalCRNDetails[crnClean].course;
-                        // نجمع الساعات فقط إذا لم نقم بحساب هذا المقرر مسبقاً
                         if (!countedCourses.has(courseCode)) {
                             totalHours += globalCRNDetails[crnClean].hours;
                             countedCourses.add(courseCode);
@@ -635,37 +634,35 @@ function loadPackagesFromLocal() {
             }
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
 
-            // 2. ثانياً: كود التحقق من الخطة الديناميكية (بعد أن تم تجهيز countedCourses)
-          // 2. ثانياً: كود التحقق من الخطة الديناميكية (بعد أن تم تجهيز countedCourses)
+            // 2. التحقق من الخطة الديناميكية والمطابقة الذكية
             let uniqueCoursesCount = countedCourses.size; 
             let planStatusHtml = `<td>-</td>`;
             
             if (st.program) {
                 let programClean = st.program.trim();
                 
-                if (Object.keys(dynamicSC04Plan).length === 0) {
+                // الاعتماد على المتغير الجديد للتحقق من إرفاق الملف
+                if (!isSc04Attached) {
                     planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يُرفق SC04</span></td>`;
                 } 
+                else if (Object.keys(dynamicSC04Plan).length === 0) {
+                    planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">لم يعثر على خطة للمستوى الأول بالملف</span></td>`;
+                }
                 else {
-                    // --- المطابقة الذكية للبحث عن التخصص ---
                     let requiredCount = null;
                     
-                    // أ) البحث بالتطابق التام
                     if (dynamicSC04Plan.hasOwnProperty(programClean)) {
                         requiredCount = dynamicSC04Plan[programClean];
                     } else {
-                        // ب) البحث الجزئي (التقريب الذكي)
                         let planKeys = Object.keys(dynamicSC04Plan);
                         for (let key of planKeys) {
-                            // إذا كان اسم التخصص بملف الطلاب يحتوي على اسم التخصص بالخطة، أو العكس
                             if (programClean.includes(key) || key.includes(programClean)) {
                                 requiredCount = dynamicSC04Plan[key];
-                                break; // تم العثور على التطابق، نوقف البحث
+                                break;
                             }
                         }
                     }
 
-                    // التحقق من النتيجة بعد المطابقة الذكية
                     if (requiredCount !== null) {
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
@@ -678,13 +675,12 @@ function loadPackagesFromLocal() {
                             planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
                         }
                     } else {
-                        // إذا لم يعثر على أي تطابق حتى بعد التقريب الذكي
                         planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة (${uniqueCoursesCount} مقرر)</span></td>`;
                     }
                 }
             }
             
-            // 3. أخيراً: بناء سطر الجدول
+            // 3. بناء سطر الجدول
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>

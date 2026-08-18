@@ -85,6 +85,21 @@
         .loader { display: none; width: 20px; height: 20px; border: 3px solid #FFF; border-bottom-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; }
         @keyframes spin { 100% { transform: rotate(360deg); } }
         .status-msg { text-align: center; margin-top: 15px; font-weight: bold; color: #dc3545; }
+
+        /* ستايل النافذة المنبثقة للجدول العرضي */
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 100000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
+.modal-box { background: #f4f9f8; border-radius: 12px; padding: 25px; max-width: 900px; width: 95%; max-height: 90vh; overflow-y: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 2px solid #008e7e; }
+.modal-close { position: absolute; top: 15px; left: 15px; background: #dc3545; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 16px; }
+.modal-close:hover { background: #c82333; transform: scale(1.1); }
+
+/* ستايل الجدول العرضي */
+.schedule-h-table { width: 100%; border-collapse: collapse; margin-top: 15px; background: #fff; }
+.schedule-h-table th, .schedule-h-table td { border: 1px solid #cbe6e3; padding: 12px; text-align: center; }
+.schedule-h-table th { background-color: #008e7e; color: #fff; width: 100px; font-size: 16px; font-weight: 800; }
+.course-badge { display: inline-block; background: #eef7f6; border-right: 4px solid #8dc63f; padding: 8px 12px; margin: 4px; border-radius: 4px; font-size: 13px; text-align: right; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+.course-badge strong { color: #008e7e; display: block; font-size: 14px; margin-bottom: 5px; border-bottom: 1px dashed #b2d8d3; padding-bottom: 3px;}
+.course-badge .time { color: #555; font-size: 12px; font-weight: bold; }
+        
     </style>
 </head>
 <body>
@@ -224,97 +239,165 @@
         });
     }
 
+    let globalCRNDetails = {}; // لجدول العرض الأفقي
+    
     // الانتقال للصفحة الثانية
-    async function goToPage2() {
-        const sp15File = document.getElementById('sp15File').files[0];
-        const status = document.getElementById('status-1');
+   async function goToPage2() {
+    const sp15File = document.getElementById('sp15File').files[0];
+    const ss01File = document.getElementById('ss01File').files[0];
+    const status = document.getElementById('status-1');
+    
+    if (!sp15File) { status.innerText = 'الرجاء إرفاق ملف قائمة المستجدين (SP15)'; return; }
+
+    document.getElementById('loader-1').style.display = 'inline-block';
+    document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
+    status.innerText = '';
+
+    try {
+        const colId = document.getElementById('col_sp15_id').value.trim();
+        const colName = document.getElementById('col_sp15_name').value.trim();
+        const colProgram = document.getElementById('col_sp15_program').value.trim();
         
-        if (!sp15File) {
-            status.innerText = 'الرجاء إرفاق ملف قائمة المستجدين (SP15)';
-            return;
-        }
-
-        document.getElementById('loader-1').style.display = 'inline-block';
-        document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
-        status.innerText = '';
-
-        try {
-            const colId = document.getElementById('col_sp15_id').value.trim();
-            const colName = document.getElementById('col_sp15_name').value.trim();
-            const colProgram = document.getElementById('col_sp15_program').value.trim();
-
-            let rawSP15 = await readExcelFile(sp15File);
+        // استخراج بيانات SS01 للجدول العرضي
+        if (ss01File) {
+            let rawSS01 = await readExcelFile(ss01File);
+            const colCrn = document.getElementById('col_ss01_crn').value.trim();
+            const colCourse = document.getElementById('col_ss01_course').value.trim();
             
-            traineesData = [];
-            let programsSet = new Set();
-            
-            rawSP15.forEach(row => {
-                let id = row[colId];
-                // استخراج ذكي للاسم لتفادي مشكلة العمود الفارغ
-                let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['Name'] || '';
-                let prog = row[colProgram];
-                
-                if (id) {
-                    traineesData.push({ 
-                        id: String(id).trim(), 
-                        name: name.toString().trim(), 
-                        program: (prog || 'غير محدد').trim() 
-                    });
-                    if (prog) programsSet.add(prog.trim());
+            globalCRNDetails = {};
+            rawSS01.forEach(row => {
+                let crn = row[colCrn];
+                if (crn) {
+                    globalCRNDetails[String(crn).trim()] = {
+                        course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
+                        name: row['اسم المقرر'] || '',
+                        time: row['الوقت'] || row['Time'] || 'غير محدد',
+                        days: row['اليوم'] || row['Days'] || 'غير محدد'
+                    };
                 }
             });
-
-            uniquePrograms = Array.from(programsSet).sort();
-            
-            if (traineesData.length === 0) {
-                throw new Error(`لم يتم العثور على بيانات. تأكد من تطابق اسم عمود "رقم المتدرب".`);
-            }
-
-            generatePackageCards();
-            switchPage('page-2');
-
-        } catch (error) {
-            status.innerText = error.message;
-        } finally {
-            document.getElementById('loader-1').style.display = 'none';
-            document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
         }
-    }
 
+        let rawSP15 = await readExcelFile(sp15File);
+        traineesData = [];
+        let programsSet = new Set();
+        
+        rawSP15.forEach(row => {
+            let id = row[colId];
+            let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['Name'] || '';
+            let prog = row[colProgram];
+            if (id) {
+                traineesData.push({ id: String(id).trim(), name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
+                if (prog) programsSet.add(prog.trim());
+            }
+        });
+
+        uniquePrograms = Array.from(programsSet).sort();
+        if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات.`);
+
+        generatePackageCards();
+        loadPackagesFromLocal(); // استرجاع المسودة هنا
+        switchPage('page-2');
+
+    } catch (error) { status.innerText = error.message; } 
+    finally {
+        document.getElementById('loader-1').style.display = 'none';
+        document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
+    }
+}
     // توليد كروت الرزم مع خيار "الكل"
     function generatePackageCards() {
-        const num = parseInt(document.getElementById('num-packages').value) || 1;
-        const container = document.getElementById('packages-container');
-        container.innerHTML = '';
+    const numInput = document.getElementById('num-packages');
+    const num = parseInt(numInput.value) || 1;
+    const container = document.getElementById('packages-container');
 
-        let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
-
-        for (let i = 1; i <= num; i++) {
-            let card = document.createElement('div');
-            card.className = 'package-card';
-            card.innerHTML = `
-                <h3>رزمة رقم ${i} <span style="font-size:12px; background:#008e7e; color:#fff; padding:2px 8px; border-radius:10px;">جديد</span></h3>
-                <div class="form-group">
-                    <label>القسم / التخصص المستهدف:</label>
-                    <select id="pkg-program-${i}">
-                        <option value="الكل">الكل (جميع التخصصات)</option>
-                        <optgroup label="تخصصات محددة">
-                            ${programOptions}
-                        </optgroup>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>السعة القصوى للمتدربين:</label>
-                    <input type="number" id="pkg-capacity-${i}" min="1" value="30">
-                </div>
-                <div class="form-group">
-                    <label>الأرقام المرجعية (CRNs): <small style="color:#666; font-weight:normal;">(افصل بينها بمسافة أو فاصلة)</small></label>
-                    <input type="text" id="pkg-crns-${i}" placeholder="مثال: 12345, 12346, 12347">
-                </div>
-            `;
-            container.appendChild(card);
+    // حفظ البيانات الموجودة حالياً في الشاشة قبل المسح
+    let tempSavedData = {};
+    for (let i = 1; i <= 50; i++) {
+        let prog = document.getElementById(`pkg-program-${i}`);
+        let cap = document.getElementById(`pkg-capacity-${i}`);
+        let crns = document.getElementById(`pkg-crns-${i}`);
+        if (prog && cap && crns) {
+            tempSavedData[i] = { prog: prog.value, cap: cap.value, crns: crns.value };
         }
     }
+
+    container.innerHTML = '';
+    let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    for (let i = 1; i <= num; i++) {
+        let card = document.createElement('div');
+        card.className = 'package-card';
+        card.innerHTML = `
+            <h3>رزمة رقم ${i}</h3>
+            <div class="form-group">
+                <label>القسم / التخصص المستهدف:</label>
+                <select id="pkg-program-${i}" onchange="savePackagesToLocal()">
+                    <option value="الكل">الكل (جميع التخصصات)</option>
+                    <optgroup label="تخصصات محددة">${programOptions}</optgroup>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>السعة القصوى للمتدربين:</label>
+                <input type="number" id="pkg-capacity-${i}" min="1" value="30" onchange="savePackagesToLocal()">
+            </div>
+            <div class="form-group">
+                <label>الأرقام المرجعية (CRNs):</label>
+                <input type="text" id="pkg-crns-${i}" placeholder="مثال: 12345, 12346" onchange="savePackagesToLocal()">
+            </div>
+        `;
+        container.appendChild(card);
+
+        // استرجاع البيانات المحفوظة للرزمة إن وجدت
+        if (tempSavedData[i]) {
+            setTimeout(() => {
+                document.getElementById(`pkg-program-${i}`).value = tempSavedData[i].prog;
+                document.getElementById(`pkg-capacity-${i}`).value = tempSavedData[i].cap;
+                document.getElementById(`pkg-crns-${i}`).value = tempSavedData[i].crns;
+            }, 0);
+        }
+    }
+    
+    // حفظ العدد والبيانات في المتصفح
+    localStorage.setItem('numPackages', num);
+    savePackagesToLocal();
+}
+
+    function savePackagesToLocal() {
+    const num = parseInt(document.getElementById('num-packages').value) || 1;
+    let pkgs = [];
+    for (let i = 1; i <= num; i++) {
+        let prog = document.getElementById(`pkg-program-${i}`);
+        let cap = document.getElementById(`pkg-capacity-${i}`);
+        let crns = document.getElementById(`pkg-crns-${i}`);
+        if (prog) {
+            pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
+        }
+    }
+    localStorage.setItem('savedPackages', JSON.stringify(pkgs));
+}
+
+function loadPackagesFromLocal() {
+    let savedNum = localStorage.getItem('numPackages');
+    let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
+    
+    if (savedNum && savedPkgs) {
+        document.getElementById('num-packages').value = savedNum;
+        generatePackageCards(); // سيقوم ببناء الكروت
+        
+        setTimeout(() => {
+            savedPkgs.forEach(pkg => {
+                let progEl = document.getElementById(`pkg-program-${pkg.id}`);
+                let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
+                let crnsEl = document.getElementById(`pkg-crns-${pkg.id}`);
+                
+                if (progEl) progEl.value = pkg.prog;
+                if (capEl) capEl.value = pkg.cap;
+                if (crnsEl) crnsEl.value = pkg.crns;
+            });
+        }, 50);
+    }
+}
 
     // خوارزمية التوزيع والإسناد
     function processAssignments() {
@@ -433,33 +516,37 @@
             return;
         }
 
-        let tableHTML = `
+      let tableHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
                         <th>رقم المتدرب</th>
                         <th>اسم المتدرب</th>
-                        <th>التخصص</th>
                         <th>الرزمة</th>
-                        <th>الأرقام المرجعية (CRNs)</th>
+                        <th>الأرقام المرجعية</th>
+                        <th>الجدول الزمني</th>
                     </tr>
                 </thead>
                 <tbody>
         `;
 
         filteredTrainees.forEach(st => {
-            let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند (الرزم ممتلئة)</span>`;
+            let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند</span>`;
             let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
-                st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') 
+                st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') : '-';
+                
+            let strCrns = JSON.stringify(st.assignedCRNs || []);
+            let scheduleBtn = st.assignedPackage ? 
+                `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>
                     <td>${st.name || 'غير متوفر'}</td>
-                    <td>${st.program}</td>
                     <td>${pkgText}</td>
                     <td>${crnsText}</td>
+                    <td>${scheduleBtn}</td>
                 </tr>
             `;
         });
@@ -515,7 +602,82 @@
         toast.className = "show";
         setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
+
+    // فتح نافذة الجدول العرضي
+function openScheduleModal(studentName, crnsArray) {
+    if (!crnsArray || crnsArray.length === 0) return;
+    
+    document.getElementById('modal-title').innerText = `الجدول العرضي: ${studentName}`;
+    const content = document.getElementById('modal-content-area');
+    
+    // بناء مصفوفة للأيام
+    let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+    let notFoundCRNs = [];
+
+    crnsArray.forEach(crn => {
+        let details = globalCRNDetails[crn.trim()];
+        if (details) {
+            let dayStr = String(details.days).replace(/\s/g, '');
+            let isMapped = false;
+            if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({crn, ...details}); isMapped = true;}
+            if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({crn, ...details}); isMapped = true;}
+            if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({crn, ...details}); isMapped = true;}
+            if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({crn, ...details}); isMapped = true;}
+            if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({crn, ...details}); isMapped = true;}
+            
+            if(!isMapped) notFoundCRNs.push({crn, ...details});
+        } else {
+            notFoundCRNs.push({ crn: crn, course: 'غير متوفر بملف SS01', time: '-', days: '-' });
+        }
+    });
+
+    let html = `<table class="schedule-h-table"><tbody>`;
+    
+    for (let day in daysMap) {
+        if (daysMap[day].length > 0) {
+            html += `<tr><th>${day}</th><td style="text-align:right;">`;
+            daysMap[day].forEach(course => {
+                html += `<div class="course-badge">
+                            <strong>${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
+                            <span class="time">🕒 ${course.time}</span>
+                         </div>`;
+            });
+            html += `</td></tr>`;
+        }
+    }
+    html += `</tbody></table>`;
+
+    if (notFoundCRNs.length > 0) {
+        html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها (أو غير مسجلة بـ SS01):</h4><ul>`;
+        notFoundCRNs.forEach(c => {
+            html += `<li><strong>${c.crn}</strong>: ${c.course} - ${c.time}</li>`;
+        });
+        html += `</ul>`;
+    }
+
+    if(Object.keys(globalCRNDetails).length === 0) {
+        html = `<div style="background:#fff3cd; color:#856404; padding:15px; border-radius:6px; font-weight:bold; text-align:center;">⚠️ لعرض الجدول العرضي، يجب إرفاق تقرير (SS01) في الصفحة الأولى.</div>`;
+    }
+
+    content.innerHTML = html;
+    document.getElementById('schedule-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeScheduleModal(event) {
+    if (event) event.stopPropagation();
+    document.getElementById('schedule-modal').style.display = 'none';
+    document.body.style.overflow = '';
+}
 </script>
 
+    <!-- نافذة عرض الجدول العرضي -->
+<div id="schedule-modal" class="modal-overlay" onclick="closeScheduleModal(event)">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <button class="modal-close" onclick="closeScheduleModal(event)">✖</button>
+        <h2 id="modal-title" style="text-align:center; color:#006d60; margin-top:0; border-bottom: 2px dashed #b2d8d3; padding-bottom: 10px;">جدول المتدرب</h2>
+        <div id="modal-content-area"></div>
+    </div>
+</div>
 </body>
 </html>

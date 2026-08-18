@@ -935,8 +935,127 @@
     function scrollToTop() {
         window.scrollTo({
             top: 0,
-            behavior: 'smooth' // صعود ناعم وليس قفزاً
+            behavior: 'smooth' // صعود ناعم  
         });
+    }
+
+    // فتح نافذة تفاصيل الخطة
+    function openPlanModal(studentName, program, crnsArray) {
+        document.getElementById('plan-modal-title').innerText = `حالة المقررات: ${studentName}`;
+        const content = document.getElementById('plan-modal-content-area');
+
+        let planData = null;
+        if (program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
+            let programClean = program.trim();
+            if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                planData = dynamicSC04Plan[programClean];
+            } else {
+                for (let key of Object.keys(dynamicSC04Plan)) {
+                    if (programClean.includes(key) || key.includes(programClean)) {
+                        planData = dynamicSC04Plan[key];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (!planData) {
+            content.innerHTML = `<div style="background:#f8d7da; color:#721c24; padding:15px; border-radius:6px; font-weight:bold; text-align:center;">لم يتم العثور على خطة للمستوى الأول لهذا التخصص.</div>`;
+            document.getElementById('plan-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+            return;
+        }
+
+        const normalizeCode = (code) => {
+            if (!code) return '';
+            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+        };
+
+        // تجميع شعب المتدرب لفحصها
+        let studentCoursesMap = {};
+        if (crnsArray && crnsArray.length > 0) {
+            crnsArray.forEach(crn => {
+                let crnClean = crn.trim();
+                if (globalCRNDetails[crnClean]) {
+                    let rawCourse = globalCRNDetails[crnClean].course;
+                    let normCourse = normalizeCode(rawCourse);
+                    let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
+                    
+                    if (!studentCoursesMap[normCourse]) {
+                        studentCoursesMap[normCourse] = { partsCount: 0, crns: [], types: [] };
+                    }
+                    studentCoursesMap[normCourse].partsCount++;
+                    studentCoursesMap[normCourse].crns.push(crnClean);
+                    studentCoursesMap[normCourse].types.push(typeStr);
+                }
+            });
+        }
+
+        let html = `<table class="schedule-h-table">
+                        <thead>
+                            <tr>
+                                <th>مقررات المستوى الأول</th>
+                                <th>الشعب المطلوبة</th>
+                                <th>الشعب المسندة</th>
+                                <th>حالة المقرر</th>
+                            </tr>
+                        </thead>
+                        <tbody>`;
+
+        let planCourses = Array.from(planData.courses);
+        
+        planCourses.forEach(planCourse => {
+            let normPlanCourse = normalizeCode(planCourse);
+            let requiredParts = window.globalCourseRequirements[normPlanCourse] || 1;
+            
+            let assignedPartsCount = 0;
+            let assignedCRNs = [];
+            let assignedTypes = [];
+
+            // مطابقة ذكية
+            for (let studentNormCourse in studentCoursesMap) {
+                if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
+                    assignedPartsCount = studentCoursesMap[studentNormCourse].partsCount;
+                    assignedCRNs = studentCoursesMap[studentNormCourse].crns;
+                    assignedTypes = studentCoursesMap[studentNormCourse].types;
+                    break;
+                }
+            }
+
+            let statusBadge = '';
+            if (assignedPartsCount === 0) {
+                statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
+            } else if (assignedPartsCount >= requiredParts) {
+                statusBadge = `<span class="badge badge-success">✅ مكتمل (${assignedCRNs.join(' - ')})</span>`;
+            } else {
+                let typeMsg = "";
+                if (requiredParts === 2) {
+                    let hasTheory = assignedTypes.some(t => t.includes('نظري') || t.includes('محاضرة'));
+                    let hasPrac = assignedTypes.some(t => t.includes('عملي') || t.includes('تدريب'));
+                    if (hasTheory && !hasPrac) typeMsg = " (ينقص الشق العملي)";
+                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص الشق النظري)";
+                }
+                statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>`;
+            }
+
+            html += `<tr>
+                        <td><strong>${planCourse}</strong></td>
+                        <td>${requiredParts}</td>
+                        <td>${assignedPartsCount}</td>
+                        <td>${statusBadge}</td>
+                     </tr>`;
+        });
+
+        html += `</tbody></table>`;
+        content.innerHTML = html;
+        document.getElementById('plan-modal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closePlanModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('plan-modal').style.display = 'none';
+        document.body.style.overflow = '';
     }
 </script>
 
@@ -949,5 +1068,13 @@
     </div>
 </div>
         <button id="scrollTopBtn" onclick="scrollToTop()" title="العودة للأعلى">⬆️</button>
+    <!-- نافذة تفاصيل الخطة -->
+    <div id="plan-modal" class="modal-overlay" onclick="closePlanModal(event)">
+        <div class="modal-box" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closePlanModal(event)">✖</button>
+            <h2 id="plan-modal-title" style="text-align:center; color:#006d60; margin-top:0; border-bottom: 2px dashed #b2d8d3; padding-bottom: 10px;">تفاصيل خطة المتدرب</h2>
+            <div id="plan-modal-content-area"></div>
+        </div>
+    </div>
 </body>
 </html>

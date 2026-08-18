@@ -174,7 +174,7 @@
                         <div><label>عمود التخصص/البرنامج</label><input type="text" id="col_sp15_program" value="وصف البرنامج"></div>
                     </div>
                 </div>
-                <div class="inner-group">
+               <div class="inner-group">
                     <h3>إعدادات تقرير الوحدة التدريبية (SS01)</h3>
                     <div class="settings-row">
                         <div><label>عمود الرقم المرجعي</label><input type="text" id="col_ss01_crn" value="الرقم المرجعي"></div>
@@ -316,7 +316,7 @@
     }
 
     // الانتقال للصفحة الثانية
-    async function goToPage2() {
+   async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
         const ss01File = document.getElementById('ss01File').files[0];
         const status = document.getElementById('status-1');
@@ -347,18 +347,16 @@
                         let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
                         let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
                         let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
+                        let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
                         
-                       // قراءة السعة المتبقية
-                       let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
-
                         if (!globalCRNDetails[crn]) {
                             globalCRNDetails[crn] = {
                                 course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
                                 name: row['اسم المقرر'] || '',
                                 type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
                                 hours: currentHours, 
-                                initialRemaining: isNaN(remCap) ? 0 : remCap, // السعة الأصلية من الملف
-                                currentRemaining: isNaN(remCap) ? 0 : remCap, // السعة الديناميكية للخصم
+                                initialRemaining: isNaN(remCap) ? 0 : remCap, 
+                                currentRemaining: isNaN(remCap) ? 0 : remCap,
                                 parts: [] 
                             };
                         } else {
@@ -373,7 +371,7 @@
                 });
             }
 
-        // معالجة ملفات الخطة SC04 (دعم أكثر من ملف ودمجها بذكاء)
+            // معالجة ملفات الخطة SC04
             const sc04Input = document.getElementById('sc04File');
             dynamicSC04Plan = {};
             window.globalCourseRequirements = {}; 
@@ -394,7 +392,6 @@
                     return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
                 };
 
-                // الدوران على جميع الملفات المحددة ودمجها في قاموس واحد
                 for (let i = 0; i < sc04Input.files.length; i++) {
                     let file = sc04Input.files[i];
                     let rawSC04 = await readExcelFile(file);
@@ -423,7 +420,6 @@
                                 dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
                             }
                             
-                            // منع التكرار لو تم رفع نفس الملف مرتين أو تشابهت المقررات
                             if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
                                 dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
                                 
@@ -438,7 +434,6 @@
                                     parts = 2; 
                                 }
                                 
-                                // تطبيق خيار استثناء الفيزياء لو كان مفعلاً
                                 let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
                                 if (excludePhysics && (normCourse.includes('فيزي') || normCourse.includes('فيزياء') || normCourse.includes('phys'))) {
                                     parts = 1; 
@@ -1104,7 +1099,6 @@ function savePhysicsSetting() {
             return;
         }
 
-        // توحيد النصوص بصرامة شاملة الحروف العربية (أ، إ، ة، ي) لضمان التطابق
         const normalizeCode = (code) => {
             if (!code) return '';
             return String(code)
@@ -1122,7 +1116,7 @@ function savePhysicsSetting() {
             assignedStatus[pc] = { partsCount: 0, crns: [], types: [] };
         });
 
-        let unmappedCRNs = []; // لجمع الشعب التي لا تخص الخطة (الميزة الجديدة)
+        let unmappedCRNs = []; 
 
         if (crnsArray && crnsArray.length > 0) {
             crnsArray.forEach(crn => {
@@ -1132,15 +1126,11 @@ function savePhysicsSetting() {
                     let rawName = globalCRNDetails[crnClean].name;
                     let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
                     
-                    // ندمج رمز المقرر واسمه للبحث الشامل
                     let crnSearchText = normalizeCode(rawCourse + rawName);
-
                     let matchedPlanCourse = null;
 
-                    // البحث عن المقرر في خطة المستوى الأول
                     for (let planCourse of planCoursesList) {
                         let normPlanCourse = normalizeCode(planCourse);
-                        // إذا كان رمز الخطة جزءاً من بيانات الشعبة في SS01 أو العكس
                         if (crnSearchText.includes(normPlanCourse) || normPlanCourse.includes(normalizeCode(rawCourse))) {
                             matchedPlanCourse = planCourse;
                             break;
@@ -1152,7 +1142,6 @@ function savePhysicsSetting() {
                         assignedStatus[matchedPlanCourse].crns.push(crnClean);
                         assignedStatus[matchedPlanCourse].types.push(typeStr);
                     } else {
-                        // الشعبة المسندة غير موجودة في خطة المستوى الأول!
                         unmappedCRNs.push({ crn: crnClean, name: (rawCourse + ' ' + rawName).trim() });
                     }
                 }
@@ -1176,13 +1165,12 @@ function savePhysicsSetting() {
             
             let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
             if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                requiredParts = 1; // إجبار النافذة المنبثقة وحساب الساعات على اعتباره شعبة واحدة
+                requiredParts = 1; 
             }
             
-           let stat = assignedStatus[planCourse];
+            let stat = assignedStatus[planCourse];
             let statusBadge = '';
 
-            // فحص هل إحدى الشعب المسندة تخطت السعة (المتبقي أصبح تحت الصفر)
             let fullWarning = "";
             let fullCrns = [];
             stat.crns.forEach(c => {
@@ -1199,10 +1187,8 @@ function savePhysicsSetting() {
             if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
             } else if (stat.partsCount === requiredParts) {
-                // يساوي تماماً العدد المطلوب = مكتمل
                 statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>` + fullWarning;
             } else if (stat.partsCount > requiredParts) {
-                // تم إسناد شعب أكثر من المطلوب = زائد
                 statusBadge = `<span class="badge badge-warning" style="background:#ffeeba; color:#856404; border: 1px dashed #856404;">⬆️ زائد عن المطلوب (${stat.crns.join(' - ')})</span>` + fullWarning;
             } else {
                 let typeMsg = "";
@@ -1214,15 +1200,7 @@ function savePhysicsSetting() {
                 }
                 statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
             }
-                let typeMsg = "";
-                if (requiredParts === 2) {
-                    let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة'));
-                    let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-                    if (hasTheory && !hasPrac) typeMsg = " (ينقص العملي)";
-                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص النظري)";
-                }
-                statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
-            }
+
             html += `<tr>
                         <td><strong>${planCourse}</strong></td>
                         <td>${requiredParts}</td>
@@ -1233,7 +1211,6 @@ function savePhysicsSetting() {
 
         html += `</tbody></table>`;
 
-        // إظهار الشعب الدخيلة (خارج الخطة) في تحذير أصفر
         if (unmappedCRNs.length > 0) {
             html += `<div style="margin-top:15px; padding:12px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px; text-align:right;">
                         <strong style="color:#856404; font-size:14px;">⚠️ تنبيه إداري هام:</strong><br>

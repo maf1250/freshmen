@@ -88,7 +88,7 @@
 
         /* ستايل النافذة المنبثقة للجدول العرضي */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 100000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
-.modal-box { background: #f4f9f8; border-radius: 12px; padding: 25px; max-width: 1200px; width: 95%; max-height: 95vh; overflow: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 2px solid #008e7e; }
+.modal-box { background: #f4f9f8; border-radius: 12px; padding: 25px; max-width: 1350px; width: 95%; max-height: 95vh; overflow: auto; position: relative; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 2px solid #008e7e; }
 .modal-close { position: absolute; top: 15px; left: 15px; background: #dc3545; color: white; border: none; width: 32px; height: 32px; border-radius: 50%; font-weight: bold; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 16px; }
 .modal-close:hover { background: #c82333; transform: scale(1.1); }
 
@@ -357,12 +357,12 @@ globalCRNDetails = {};
                 </select>
             </div>
             <div class="form-group">
-                <label>السعة القصوى للمتدربين:</label>
-                <input type="number" id="pkg-capacity-${i}" min="1" value="30" onchange="savePackagesToLocal()">
+                <label>السعة القصوى للمتدربين بالرزمة:</label>
+                <input type="number" id="pkg-capacity-${i}" min="1" value="20" onchange="savePackagesToLocal()">
             </div>
             <div class="form-group">
                 <label>الأرقام المرجعية (CRNs):</label>
-                <input type="text" id="pkg-crns-${i}" placeholder="مثال: 12345, 12346" onchange="savePackagesToLocal()">
+                <input type="text" id="pkg-crns-${i}" placeholder="افصل بين الارقام بمسافة أو فاصلة مثال: 12345 12346" onchange="savePackagesToLocal()">
             </div>
         `;
         container.appendChild(card);
@@ -661,7 +661,9 @@ function openScheduleModal(studentName, crnsArray) {
                 let isMapped = false;
                 
                 let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
-                let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time };
+                
+                // التعديل 1: أضفنا نوع الشعبة (type) لتمريرها لكود الألوان
+                let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '' };
 
                 if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push(courseInstance); isMapped = true;}
                 if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push(courseInstance); isMapped = true;}
@@ -678,7 +680,6 @@ function openScheduleModal(studentName, crnsArray) {
 
     let html = `<table class="schedule-h-table"><tbody>`;
     
-    // دالة لاستخراج وقت البداية لترتيب الجدول زمنياً
     function getStartTime(timeString) {
         let match = timeString.match(/\d+/);
         return match ? parseInt(match[0], 10) : 9999;
@@ -687,13 +688,25 @@ function openScheduleModal(studentName, crnsArray) {
     for (let day in daysMap) {
         if (daysMap[day].length > 0) {
             
-            // ترتيب المقررات حسب الوقت (الأبدر أولاً)
+            // ترتيب المقررات حسب الوقت
             daysMap[day].sort((a, b) => getStartTime(a.time) - getStartTime(b.time));
 
             html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
             daysMap[day].forEach(course => {
-                // تم وضع الوقت داخل span بخصائص dir="ltr" لمنع انعكاس الأرقام
-                html += `<div class="course-badge">
+                
+                // التعديل 2: تحديد لون الخط الجانبي والخلفية بناءً على كلمة (نظري / عملي)
+                let borderColor = "#8dc63f"; // لون افتراضي
+                let bgColor = "#eef7f6"; 
+                
+                if (course.type.includes('نظري')) {
+                    borderColor = "#006d60"; // أخضر غامق جداً للنظري
+                    bgColor = "#e5f0ef"; // خلفية أغمق قليلاً
+                } else if (course.type.includes('عملي')) {
+                    borderColor = "#8dc63f"; // أخضر ليموني فاتح للعملي
+                    bgColor = "#f6fcf3"; // خلفية أفتح وأكثر بياضاً
+                }
+
+                html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
                             <strong>${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
                             <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
                          </div>`;

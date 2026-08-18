@@ -180,6 +180,7 @@
                         <div><label>عمود الرقم المرجعي</label><input type="text" id="col_ss01_crn" value="الرقم المرجعي"></div>
                         <div><label>عمود المقرر</label><input type="text" id="col_ss01_course" value="المقرر"></div>
                         <div><label>عمود الساعات المعتمدة</label><input type="text" id="col_ss01_hours" value="الساعات المعتمدة"></div>
+                        <div><label>عمود المقاعد المتبقية</label><input type="text" id="col_ss01_remaining" value="متبقي"></div>
                     </div>
                 </div>
                 <div class="inner-group">
@@ -337,6 +338,7 @@
                 const colCrn = document.getElementById('col_ss01_crn').value.trim();
                 const colCourse = document.getElementById('col_ss01_course').value.trim();
                 const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
+                const colRem = document.getElementById('col_ss01_remaining') ? document.getElementById('col_ss01_remaining').value.trim() : 'متبقي';
                 
                 globalCRNDetails = {};
                 rawSS01.forEach(row => {
@@ -347,7 +349,7 @@
                         let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
                         
                        // قراءة السعة المتبقية
-                        let remCap = parseInt(row['متبقي'] || row['المتبقي'] || 0);
+                       let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
 
                         if (!globalCRNDetails[crn]) {
                             globalCRNDetails[crn] = {
@@ -355,7 +357,8 @@
                                 name: row['اسم المقرر'] || '',
                                 type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
                                 hours: currentHours, 
-                                remaining: isNaN(remCap) ? 0 : remCap, // حفظ السعة المتبقية
+                                initialRemaining: isNaN(remCap) ? 0 : remCap, // السعة الأصلية من الملف
+                                currentRemaining: isNaN(remCap) ? 0 : remCap, // السعة الديناميكية للخصم
                                 parts: [] 
                             };
                         } else {
@@ -609,6 +612,11 @@ function savePhysicsSetting() {
         document.getElementById('btnText-2').innerText = 'جارِ التوزيع...';
         status.innerText = '';
 
+       // إعادة تعيين السعة الديناميكية لكل الشعب قبل بدء التوزيع
+        for (let key in globalCRNDetails) {
+            globalCRNDetails[key].currentRemaining = globalCRNDetails[key].initialRemaining;
+        }
+
         traineesData.forEach(t => {
             t.assignedPackage = null;
             t.assignedCRNs = [];
@@ -621,6 +629,15 @@ function savePhysicsSetting() {
                     pkg.currentCount++;
                     trainee.assignedPackage = pkg.id;
                     trainee.assignedCRNs = pkg.crns;
+                    
+                    // خصم المقاعد من الشعب المسندة
+                    pkg.crns.forEach(crn => {
+                        let cleanCrn = crn.trim();
+                        if (globalCRNDetails[cleanCrn]) {
+                            globalCRNDetails[cleanCrn].currentRemaining--;
+                        }
+                    });
+                    
                     break;
                 }
             }
@@ -1165,25 +1182,38 @@ function savePhysicsSetting() {
            let stat = assignedStatus[planCourse];
             let statusBadge = '';
 
-            // فحص هل إحدى الشعب المسندة ممتلئة (المتبقي 0 أو أقل)
+            // فحص هل إحدى الشعب المسندة تخطت السعة (المتبقي أصبح تحت الصفر)
             let fullWarning = "";
             let fullCrns = [];
             stat.crns.forEach(c => {
-                if (globalCRNDetails[c] && globalCRNDetails[c].remaining <= 0) {
-                    fullCrns.push(c);
+                if (globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0) {
+                    let exceededBy = Math.abs(globalCRNDetails[c].currentRemaining);
+                    fullCrns.push(`${c} <span style="font-size:10px;">(تجاوز بـ ${exceededBy} مقعد)</span>`);
                 }
             });
 
-            // تجهيز وسم التحذير في حال وجود شعب ممتلئة
             if (fullCrns.length > 0) {
-                fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 الشعبة ممتلئة (${fullCrns.join(' - ')})</span>`;
+                fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 السعة لا تكفي:<br>${fullCrns.join('<br>')}</span>`;
             }
 
             if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
-            } else if (stat.partsCount >= requiredParts) {
+            } else if (stat.partsCount === requiredParts) {
+                // يساوي تماماً العدد المطلوب = مكتمل
                 statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>` + fullWarning;
+            } else if (stat.partsCount > requiredParts) {
+                // تم إسناد شعب أكثر من المطلوب = زائد
+                statusBadge = `<span class="badge badge-warning" style="background:#ffeeba; color:#856404; border: 1px dashed #856404;">⬆️ زائد عن المطلوب (${stat.crns.join(' - ')})</span>` + fullWarning;
             } else {
+                let typeMsg = "";
+                if (requiredParts === 2) {
+                    let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة'));
+                    let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                    if (hasTheory && !hasPrac) typeMsg = " (ينقص العملي)";
+                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص النظري)";
+                }
+                statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
+            }
                 let typeMsg = "";
                 if (requiredParts === 2) {
                     let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة'));

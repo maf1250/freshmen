@@ -641,10 +641,16 @@ function loadPackagesFromLocal() {
             let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
                 st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') : '-';
                 
-            let strCrns = JSON.stringify(st.assignedCRNs || []);
-            let scheduleBtn = st.assignedPackage ? 
-                `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
-                : '-';
+         let strCrns = JSON.stringify(st.assignedCRNs || []);
+            let scheduleBtn = '-';
+            if (st.assignedPackage) {
+                // فحص التعارض قبل رسم الزر
+                let conflictCheck = checkScheduleConflicts(st.assignedCRNs);
+                let btnStyle = conflictCheck.hasOverlap ? "background:#dc3545;" : "background:#008e7e;";
+                let btnText = conflictCheck.hasOverlap ? "⚠️ يوجد تعارض" : "🗓️ عرض الجدول";
+                
+                scheduleBtn = `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="${btnStyle} color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">${btnText}</button>`;
+            }
 
 // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
@@ -811,7 +817,52 @@ function loadPackagesFromLocal() {
         setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
 
-    // فتح نافذة الجدول العرضي
+    // خوارزمية اكتشاف التعارض الزمني
+function checkScheduleConflicts(crnsArray) {
+    let daySchedules = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+    let hasOverlap = false;
+
+    if (!crnsArray) return { hasOverlap: false };
+
+    crnsArray.forEach(crn => {
+        let details = globalCRNDetails[crn.trim()];
+        if (details) {
+            details.parts.forEach(part => {
+                let times = String(part.time).match(/\d+/g);
+                if (times && times.length >= 2) {
+                    let start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
+                    let end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
+
+                    let dayStr = String(part.days).replace(/\s/g, '');
+                    let daysMatched = [];
+                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) daysMatched.push('الأحد');
+                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) daysMatched.push('الإثنين');
+                    if (dayStr.includes('الثلاثاء')) daysMatched.push('الثلاثاء');
+                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) daysMatched.push('الأربعاء');
+                    if (dayStr.includes('الخميس')) daysMatched.push('الخميس');
+
+                    daysMatched.forEach(d => {
+                        daySchedules[d].push({ crn: crn.trim(), start: start, end: end });
+                    });
+                }
+            });
+        }
+    });
+
+    // فحص التداخل (التعارض يحدث إذا كانت أكبر نقطة بداية أصغر من أصغر نقطة نهاية)
+    for (let day in daySchedules) {
+        let classes = daySchedules[day];
+        for (let i = 0; i < classes.length; i++) {
+            for (let j = i + 1; j < classes.length; j++) {
+                if (Math.max(classes[i].start, classes[j].start) < Math.min(classes[i].end, classes[j].end)) {
+                    return { hasOverlap: true };
+                }
+            }
+        }
+    }
+    return { hasOverlap: false };
+}
+ // فتح نافذة الجدول العرضي مع تلوين التعارضات
 function openScheduleModal(studentName, crnsArray) {
     if (!crnsArray || crnsArray.length === 0) return;
     
@@ -828,26 +879,96 @@ function openScheduleModal(studentName, crnsArray) {
                 let dayStr = String(part.days).replace(/\s/g, '');
                 let isMapped = false;
                 
-                let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
+                let times = String(part.time).match(/\d+/g);
+                let start = 9999, end = 9999;
+                if (times && times.length >= 2) {
+                    start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
+                    end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
+                }
                 
-                // التعديل 1: أضفنا نوع الشعبة (type) لتمريرها لكود الألوان
-                let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '' };
+                let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
+                let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '', start: start, end: end, isConflicting: false };
 
-                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push(courseInstance); isMapped = true;}
-                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push(courseInstance); isMapped = true;}
-                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push(courseInstance); isMapped = true;}
-                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push(courseInstance); isMapped = true;}
-                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push(courseInstance); isMapped = true;}
+                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
                 
                 if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
             });
         } else {
-            notFoundCRNs.push({ crn: crn.trim(), course: ' غير متوفر بتقرير SS01', time: '-', days: '-' });
+            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
         }
     });
 
     let html = `<table class="schedule-h-table"><tbody>`;
     
+    for (let day in daysMap) {
+        if (daysMap[day].length > 0) {
+            
+            // 1. ترتيب المقررات حسب الوقت
+            daysMap[day].sort((a, b) => a.start - b.start);
+
+            // 2. اكتشاف المقررات المتعارضة وتغيير حالتها في هذا اليوم
+            for (let i = 0; i < daysMap[day].length; i++) {
+                for (let j = 0; j < daysMap[day].length; j++) {
+                    if (i !== j) {
+                        if (Math.max(daysMap[day][i].start, daysMap[day][j].start) < Math.min(daysMap[day][i].end, daysMap[day][j].end)) {
+                            daysMap[day][i].isConflicting = true;
+                        }
+                    }
+                }
+            }
+
+            html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
+            daysMap[day].forEach(course => {
+                
+                let borderColor = "#8dc63f"; 
+                let bgColor = "#eef7f6"; 
+                
+                if (course.type.includes('نظري')) {
+                    borderColor = "#006d60";
+                    bgColor = "#e5f0ef";
+                } else if (course.type.includes('عملي')) {
+                    borderColor = "#8dc63f";
+                    bgColor = "#f6fcf3";
+                }
+                
+                // 3. التلوين الأحمر التحذيري عند التعارض
+                let warningIcon = '';
+                if (course.isConflicting) {
+                    borderColor = "#dc3545"; // أحمر صارخ
+                    bgColor = "#f8d7da"; // خلفية حمراء باهتة
+                    warningIcon = '⚠️ <span style="color:#dc3545; font-size:11px;">(تعارض زمني)</span><br>';
+                }
+
+                html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
+                            <strong>${warningIcon}${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
+                            <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
+                         </div>`;
+            });
+            html += `</td></tr>`;
+        }
+    }
+    html += `</tbody></table>`;
+
+    if (notFoundCRNs.length > 0) {
+        html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها (أو غير مسجلة بـ SS01):</h4><ul>`;
+        notFoundCRNs.forEach(c => {
+            html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`;
+        });
+        html += `</ul>`;
+    }
+
+    if(Object.keys(globalCRNDetails).length === 0) {
+        html = `<div style="background:#fff3cd; color:#856404; padding:15px; border-radius:6px; font-weight:bold; text-align:center;">⚠️ لعرض الجدول العرضي، يجب إرفاق تقرير (SS01) في الصفحة الأولى.</div>`;
+    }
+
+    content.innerHTML = html;
+    document.getElementById('schedule-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}    
     function getStartTime(timeString) {
         let match = timeString.match(/\d+/);
         return match ? parseInt(match[0], 10) : 9999;

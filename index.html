@@ -346,12 +346,16 @@
                         let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
                         let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
                         
+                       // قراءة السعة المتبقية
+                        let remCap = parseInt(row['متبقي'] || row['المتبقي'] || 0);
+
                         if (!globalCRNDetails[crn]) {
                             globalCRNDetails[crn] = {
                                 course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
                                 name: row['اسم المقرر'] || '',
                                 type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
                                 hours: currentHours, 
+                                remaining: isNaN(remCap) ? 0 : remCap, // حفظ السعة المتبقية
                                 parts: [] 
                             };
                         } else {
@@ -1158,12 +1162,27 @@ function savePhysicsSetting() {
                 requiredParts = 1; // إجبار النافذة المنبثقة وحساب الساعات على اعتباره شعبة واحدة
             }
             
-            let stat = assignedStatus[planCourse];
+           let stat = assignedStatus[planCourse];
             let statusBadge = '';
+
+            // فحص هل إحدى الشعب المسندة ممتلئة (المتبقي 0 أو أقل)
+            let fullWarning = "";
+            let fullCrns = [];
+            stat.crns.forEach(c => {
+                if (globalCRNDetails[c] && globalCRNDetails[c].remaining <= 0) {
+                    fullCrns.push(c);
+                }
+            });
+
+            // تجهيز وسم التحذير في حال وجود شعب ممتلئة
+            if (fullCrns.length > 0) {
+                fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 الشعبة ممتلئة (${fullCrns.join(' - ')})</span>`;
+            }
+
             if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
             } else if (stat.partsCount >= requiredParts) {
-                statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>`;
+                statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>` + fullWarning;
             } else {
                 let typeMsg = "";
                 if (requiredParts === 2) {
@@ -1172,9 +1191,8 @@ function savePhysicsSetting() {
                     if (hasTheory && !hasPrac) typeMsg = " (ينقص العملي)";
                     else if (!hasTheory && hasPrac) typeMsg = " (ينقص النظري)";
                 }
-                statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>`;
+                statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
             }
-
             html += `<tr>
                         <td><strong>${planCourse}</strong></td>
                         <td>${requiredParts}</td>

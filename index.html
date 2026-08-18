@@ -609,7 +609,7 @@ function savePhysicsSetting() {
         const filterSelect = document.getElementById('result-program-filter');
         filterSelect.innerHTML = `<option value="الكل" selected>الكل (جميع المتدربين)</option>`;
         uniquePrograms.forEach(prog => { filterSelect.innerHTML += `<option value="${prog}">${prog}</option>`; });
-        filterSelect.innerHTML += `<option value="غير مسند">المتدربين غير المسندين (السعة ممتلئة)</option>`;
+        filterSelect.innerHTML += `<option value="غير مسند">المتدربون غير المسند لهم (السعة ممتلئة)</option>`;
         renderResultsTable();
     }
 
@@ -777,11 +777,9 @@ function savePhysicsSetting() {
                             break;
                         }
                     }
-                    // إضافة الشعب الصحيحة فقط، وبحد أقصى المطلوب للمقرر (لمنع تعويض النقص بمقرر آخر)
                     validStudentPartsCount += Math.min(assignedForThis, requiredForThis);
                 });
 
-                // إذا كان إجمالي الشعب التي أدخلتها أكبر من الشعب الصحيحة المطابقة، يعني أن هناك شعب غريبة/خاطئة!
                 if (studentPartsCount > validStudentPartsCount) {
                     hasUnmapped = true; 
                 }
@@ -809,8 +807,7 @@ function savePhysicsSetting() {
                         let badgeHover = "onmouseover=\"this.style.transform='scale(1.05)'; this.style.opacity='0.9';\" onmouseout=\"this.style.transform='scale(1)'; this.style.opacity='1';\"";
                         let clickAction = `onclick="openPlanModal('${studentNameEscaped}', '${programEscaped}', ${strCrnsEscaped})" title="انقر لعرض تفاصيل المقررات"`;
 
-                        // تحذير مرئي بالجدول إذا كان هناك شعب غريبة
-                        let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب غريبة</span>` : '';
+                        let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب دخيلة</span>` : '';
 
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
@@ -1155,7 +1152,7 @@ function savePhysicsSetting() {
 
         html += `</tbody></table>`;
 
-        // إظهار الشعب الغريبة (خارج الخطة) في تحذير أصفر
+        // إظهار الشعب الدخيلة (خارج الخطة) في تحذير أصفر
         if (unmappedCRNs.length > 0) {
             html += `<div style="margin-top:15px; padding:12px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px; text-align:right;">
                         <strong style="color:#856404; font-size:14px;">⚠️ تنبيه إداري هام:</strong><br>

@@ -127,6 +127,14 @@
                         <div><label>عمود الساعات المعتمدة</label><input type="text" id="col_ss01_hours" value="الساعات المعتمدة"></div>
                     </div>
                 </div>
+                <div class="inner-group">
+                    <h3>إعدادات الخطة التدريبية (SC04)</h3>
+                    <div class="settings-row">
+                        <div><label>عمود التخصص</label><input type="text" id="col_sc04_program" value="التخصص"></div>
+                        <div><label>عمود الفصل</label><input type="text" id="col_sc04_semester" value="الفصل التدريبي"></div>
+                        <div><label>عمود المقرر</label><input type="text" id="col_sc04_course" value="المقرر"></div>
+                    </div>
+                </div>
             </div>
         </details>
 
@@ -140,6 +148,10 @@
             <input type="file" id="ss01File" accept=".csv">
         </div>
 
+        <div class="upload-group">
+            <label>3. تقرير الخطط التدريبية (SC04) [اختياري لمقارنة الخطة]</label>
+            <input type="file" id="sc04File" accept=".csv">
+        </div>
        
         <button class="btn-process" onclick="goToPage2()">
             <span class="loader" id="loader-1"></span>
@@ -206,7 +218,7 @@
     let traineesData = [];
     let uniquePrograms = [];
     let packagesData = [];
-    
+    let dynamicSC04Plan = {};
     // دوال قراءة الملفات
     function readExcelFile(file) {
         return new Promise((resolve, reject) => {
@@ -294,6 +306,47 @@ globalCRNDetails = {};
             });
         }
 
+        // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول
+       // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
+        const sc04File = document.getElementById('sc04File').files[0];
+        dynamicSC04Plan = {};
+        if (sc04File) {
+            let rawSC04 = await readExcelFile(sc04File);
+            const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
+            const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
+            
+            rawSC04.forEach(row => {
+                let prog = row[colProgSc04] || row['التخصص'];
+                let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+                
+                // --- الكود الذكي لحل مشكلة تكرار عمود "الفصل التدريبي" ---
+                let isLevel1 = false;
+                // نستخرج كل الأعمدة التي يحتوي اسمها على كلمة "الفصل"
+                let semKeys = Object.keys(row).filter(k => k.includes('الفصل'));
+                
+                for (let key of semKeys) {
+                    let val = String(row[key]).trim();
+                    // نتأكد أن القيمة هي "الفصل التدريبي 1" وليست الفصل الزمني 144710
+                    if ((val.includes('الفصل التدريبي 1') || val === '1' || val.includes('الفصل الأول')) && !val.startsWith('144')) {
+                        isLevel1 = true;
+                        break;
+                    }
+                }
+
+                if (prog && course && isLevel1) {
+                    let cleanProg = prog.trim();
+                    if (!dynamicSC04Plan[cleanProg]) {
+                        dynamicSC04Plan[cleanProg] = new Set();
+                    }
+                    dynamicSC04Plan[cleanProg].add(course.trim());
+                }
+            });
+            
+            // تحويل Set إلى رقم يعبر عن عدد المقررات المطلوبة لكل تخصص
+            for (let p in dynamicSC04Plan) {
+                dynamicSC04Plan[p] = dynamicSC04Plan[p].size;
+            }
+        }
         let rawSP15 = await readExcelFile(sp15File);
         traineesData = [];
         let programsSet = new Set();
@@ -549,7 +602,7 @@ function loadPackagesFromLocal() {
                 <tbody>
         `;
 
-        filteredTrainees.forEach(st => {
+       filteredTrainees.forEach(st => {
             let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند</span>`;
             let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
                 st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') : '-';
@@ -559,8 +612,7 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-            // حساب الساعات المعتمدة للمتدرب
-           // حساب الساعات المعتمدة للمتدرب بدون تكرار للمقررات ذات الشقين
+            // 1. أولاً: حساب الساعات المعتمدة للمتدرب وحصر المقررات (يجب أن يتم أولاً)
             let totalHours = 0;
             let countedCourses = new Set();
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
@@ -568,7 +620,7 @@ function loadPackagesFromLocal() {
                     let crnClean = crn.trim();
                     if (globalCRNDetails[crnClean]) {
                         let courseCode = globalCRNDetails[crnClean].course;
-                        // نجمع الساعات فقط إذا لم نقم بحساب هذا المقرر مسبقاً (لنتجنب جمع النظري والعملي معاً)
+                        // نجمع الساعات فقط إذا لم نقم بحساب هذا المقرر مسبقاً
                         if (!countedCourses.has(courseCode)) {
                             totalHours += globalCRNDetails[crnClean].hours;
                             countedCourses.add(courseCode);
@@ -577,7 +629,36 @@ function loadPackagesFromLocal() {
                 });
             }
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
+
+            // 2. ثانياً: كود التحقق من الخطة الديناميكية (بعد أن تم تجهيز countedCourses)
+            let uniqueCoursesCount = countedCourses.size; 
+            let planStatusHtml = `<td>-</td>`;
             
+            if (st.program) {
+                let programClean = st.program.trim();
+                
+                if (Object.keys(dynamicSC04Plan).length === 0) {
+                    planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يُرفق SC04</span></td>`;
+                } 
+                else if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                    let requiredCount = dynamicSC04Plan[programClean]; 
+                    
+                    if (st.assignedPackage === null) {
+                        planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
+                    }
+                    else if (uniqueCoursesCount === requiredCount) {
+                        planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                    } else if (uniqueCoursesCount < requiredCount) {
+                        planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                    } else {
+                        planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                    }
+                } else {
+                    planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة (${uniqueCoursesCount} مقرر)</span></td>`;
+                }
+            }
+            
+            // 3. أخيراً: بناء سطر الجدول
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>
@@ -585,6 +666,7 @@ function loadPackagesFromLocal() {
                     <td>${pkgText}</td>
                     <td>${crnsText}</td>
                     <td>${hoursBadge}</td>
+                    ${planStatusHtml}
                     <td>${scheduleBtn}</td>
                 </tr>
             `;

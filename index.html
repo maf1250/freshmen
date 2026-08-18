@@ -732,7 +732,41 @@ function savePhysicsSetting() {
                 }
             }
 
+            // 2. التحقق من الخطة الديناميكية والمطابقة الذكية الحقيقية (للجدول الرئيسي)
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
+            let validStudentPartsCount = 0;
+            let hasUnmapped = false;
+
+            if (planData && st.assignedCRNs && st.assignedCRNs.length > 0) {
+                let planCoursesList = Array.from(planData.courses);
+                
+                // حساب الشعب "الصحيحة" التي تطابق الخطة فعلياً فقط
+                planCoursesList.forEach(planCourse => {
+                    let normPlanCourse = normalizeCode(planCourse);
+                    let requiredForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+                    
+                    let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+                    if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
+                        requiredForThis = 1;
+                    }
+
+                    let assignedForThis = 0;
+                    for (let studentNormCourse in studentCoursesMap) {
+                        if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
+                            assignedForThis = studentCoursesMap[studentNormCourse].count;
+                            break;
+                        }
+                    }
+                    // إضافة الشعب الصحيحة فقط، وبحد أقصى المطلوب للمقرر (لمنع تعويض النقص بمقرر آخر)
+                    validStudentPartsCount += Math.min(assignedForThis, requiredForThis);
+                });
+
+                // إذا كان إجمالي الشعب التي أدخلتها أكبر من الشعب الصحيحة المطابقة، يعني أن هناك شعب غريبة/خاطئة!
+                if (studentPartsCount > validStudentPartsCount) {
+                    hasUnmapped = true; 
+                }
+            }
+
             let planStatusHtml = `<td>-</td>`;
             
             if (st.program) {
@@ -743,7 +777,7 @@ function savePhysicsSetting() {
                     planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">لم يعثر على خطة للمستوى الأول بالملف</span></td>`;
                 }
                 else {
-                   if (planData) {
+                    if (planData) {
                         let requiredParts = planData.requiredParts; 
                         
                         // تجهيز المتغيرات للنافذة المنبثقة
@@ -755,22 +789,24 @@ function savePhysicsSetting() {
                         let badgeHover = "onmouseover=\"this.style.transform='scale(1.05)'; this.style.opacity='0.9';\" onmouseout=\"this.style.transform='scale(1)'; this.style.opacity='1';\"";
                         let clickAction = `onclick="openPlanModal('${studentNameEscaped}', '${programEscaped}', ${strCrnsEscaped})" title="انقر لعرض تفاصيل المقررات"`;
 
+                        // تحذير مرئي بالجدول إذا كان هناك شعب غريبة
+                        let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب غريبة</span>` : '';
+
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
-                        else if (studentPartsCount === requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
-                        } else if (studentPartsCount < requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
+                        else if (validStudentPartsCount === requiredParts && !hasUnmapped) {
+                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
+                        } else if (validStudentPartsCount < requiredParts) {
+                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning} 👆</span></td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning} 👆</span></td>`;
                         }
                     } else {
-                       planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;
+                        planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;
                     }
                 }
             }
-
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>
@@ -953,7 +989,7 @@ function savePhysicsSetting() {
     }
     // إظهار/إخفاء زر الصعود للأعلى بذكاء عند التمرير
     window.onscroll = function() {
-        let scrollBtn = document.getElementById("scrollTopBtn");
+        let scrollBtn = document.getElementById("scrollToTopBtn");
         // يظهر الزر إذا نزل المستخدم للأسفل بمقدار 200 بكسل
         if (document.body.scrollTop > 200 || document.documentElement.scrollTop > 200) {
             scrollBtn.classList.add("show");
@@ -1131,7 +1167,7 @@ function savePhysicsSetting() {
         <div id="modal-content-area"></div>
     </div>
 </div>
-     <button id="scrollTopBtn" onclick="scrollToTop()" title="العودة للأعلى">
+     <button id="scrollToTopBtn" onclick="scrollToTop()" title="العودة للأعلى">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="18 15 12 9 6 15"></polyline>
         </svg>

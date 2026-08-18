@@ -182,7 +182,7 @@
 
         <div class="upload-group">
             <label>3. تقرير الخطط التدريبية (SC04) [اختياري لمقارنة الخطة]</label>
-            <input type="file" id="sc04File" accept=".csv">
+            <input type="file" id="sc04File" accept=".csv" multiple title="يمكنك تحديد أكثر من ملف بالضغط على زر Ctrl">
         </div>
        
         <button class="btn-process" onclick="goToPage2()">
@@ -343,14 +343,13 @@
                 });
             }
 
-            // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
-            const sc04File = document.getElementById('sc04File').files[0];
+        // معالجة ملفات الخطة SC04 (دعم أكثر من ملف ودمجها بذكاء)
+            const sc04Input = document.getElementById('sc04File');
             dynamicSC04Plan = {};
             window.globalCourseRequirements = {}; 
-            isSc04Attached = !!sc04File; 
+            isSc04Attached = sc04Input.files.length > 0; 
 
             if (isSc04Attached) {
-                let rawSC04 = await readExcelFile(sc04File);
                 const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
                 const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
                 
@@ -365,57 +364,63 @@
                     return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
                 };
 
-                rawSC04.forEach(row => {
-                    let prog = row[colProgSc04] || row['التخصص'];
-                    let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
-                    
-                    let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
-                    let v = String(levelValue).trim();
-                    
-                    let isLevel1 = false;
-                    if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
-                        !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
-                        if (!v.includes('144') && !v.includes('145')) {
-                            isLevel1 = true;
-                        }
-                    }
-                    
-                    if (prog && course && isLevel1) {
-                        let cleanProg = prog.trim();
-                        let cleanCourse = course.trim();
-                        let normCourse = normalizeCode(cleanCourse); 
-                        
-                        if (!dynamicSC04Plan[cleanProg]) {
-                            dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
-                        }
-                        
-                        if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
-                            dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
-                            
-                            let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
-                            let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
-                            
-                            let theory = parseNumber(theoryRaw);
-                            let practical = parseNumber(practicalRaw);
-                            
+                // الدوران على جميع الملفات المحددة ودمجها في قاموس واحد
+                for (let i = 0; i < sc04Input.files.length; i++) {
+                    let file = sc04Input.files[i];
+                    let rawSC04 = await readExcelFile(file);
 
-                            let parts = 1; 
-                            if (theory > 0 && practical > 0) {
-                                parts = 2; 
+                    rawSC04.forEach(row => {
+                        let prog = row[colProgSc04] || row['التخصص'];
+                        let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+                        
+                        let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
+                        let v = String(levelValue).trim();
+                        
+                        let isLevel1 = false;
+                        if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
+                            !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
+                            if (!v.includes('144') && !v.includes('145')) {
+                                isLevel1 = true;
                             }
-                            
-                            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-                            if (excludePhysics && (normCourse.includes('فيزي') || normCourse.includes('فيزياء') || normCourse.includes('phys'))) {
-                                parts = 1; // إجبار النظام على اعتباره شعبة واحدة
-                            }
-                            
-                            dynamicSC04Plan[cleanProg].requiredParts += parts;
-                            window.globalCourseRequirements[normCourse] = parts;
                         }
-                    }
-                });
+                        
+                        if (prog && course && isLevel1) {
+                            let cleanProg = prog.trim();
+                            let cleanCourse = course.trim();
+                            let normCourse = normalizeCode(cleanCourse); 
+                            
+                            if (!dynamicSC04Plan[cleanProg]) {
+                                dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
+                            }
+                            
+                            // منع التكرار لو تم رفع نفس الملف مرتين أو تشابهت المقررات
+                            if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
+                                dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
+                                
+                                let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
+                                let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
+                                
+                                let theory = parseNumber(theoryRaw);
+                                let practical = parseNumber(practicalRaw);
+                                
+                                let parts = 1; 
+                                if (theory > 0 && practical > 0) {
+                                    parts = 2; 
+                                }
+                                
+                                // تطبيق خيار استثناء الفيزياء لو كان مفعلاً
+                                let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+                                if (excludePhysics && (normCourse.includes('فيزي') || normCourse.includes('فيزياء') || normCourse.includes('phys'))) {
+                                    parts = 1; 
+                                }
+                                
+                                dynamicSC04Plan[cleanProg].requiredParts += parts;
+                                window.globalCourseRequirements[normCourse] = parts;
+                            }
+                        }
+                    });
+                }
             }
-
             let rawSP15 = await readExcelFile(sp15File);
             traineesData = [];
             let programsSet = new Set();
@@ -732,7 +737,7 @@ function savePhysicsSetting() {
                 }
             }
 
-            // 2. التحقق من الخطة الديناميكية والمطابقة الذكية الحقيقية (للجدول الرئيسي)
+          // 2. التحقق من الخطة الديناميكية والمطابقة الذكية الحقيقية (للجدول الرئيسي)
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
             let validStudentPartsCount = 0;
             let hasUnmapped = false;
@@ -740,6 +745,21 @@ function savePhysicsSetting() {
             if (planData && st.assignedCRNs && st.assignedCRNs.length > 0) {
                 let planCoursesList = Array.from(planData.courses);
                 
+                // --- بداية الإصلاح: تعريف وبناء بيانات studentCoursesMap ---
+                let studentCoursesMap = {};
+                st.assignedCRNs.forEach(crn => {
+                    let crnClean = String(crn).trim();
+                    if (globalCRNDetails[crnClean]) {
+                        let rawCourse = globalCRNDetails[crnClean].course;
+                        let normCourse = normalizeCode(rawCourse);
+                        if (!studentCoursesMap[normCourse]) {
+                            studentCoursesMap[normCourse] = { count: 0 };
+                        }
+                        studentCoursesMap[normCourse].count++;
+                    }
+                });
+                // --- نهاية الإصلاح ---
+
                 // حساب الشعب "الصحيحة" التي تطابق الخطة فعلياً فقط
                 planCoursesList.forEach(planCourse => {
                     let normPlanCourse = normalizeCode(planCourse);

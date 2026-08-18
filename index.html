@@ -862,11 +862,11 @@ function savePhysicsSetting() {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
                         else if (validStudentPartsCount === requiredParts && !hasUnmapped) {
-                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة)</span></td>`;
                         } else if (validStudentPartsCount < requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning} 👆</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning}</span></td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning} 👆</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)${unmappedWarning}</span></td>`;
                         }
                     } else {
                         planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;

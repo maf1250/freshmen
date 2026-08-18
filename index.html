@@ -321,44 +321,30 @@ globalCRNDetails = {};
             let rawSC04 = await readExcelFile(sc04File);
             const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
             const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
-            const colSemSc04 = document.getElementById('col_sc04_semester') ? document.getElementById('col_sc04_semester').value.trim() : 'الفصل التدريبي';
             
-            // دالة لتحويل الأرقام المشرقية (١،٢،٣) إلى أرقام إنجليزية للعمليات الحسابية
+            // دالة لتحويل الأرقام المشرقية إن وجدت
             const parseNumber = (val) => {
                 if (!val) return 0;
                 let v = String(val).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
                 return parseFloat(v) || 0;
             };
 
-            // دالة للتحقق الصارم من أن القيمة تعني "المستوى الأول" فقط وتتجاهل رموز الفصول (مثل 14451)
-            const isStrictlyLevel1 = (val) => {
-                let v = String(val).trim();
-                // تطابق تام مع رقم 1 أو 01
-                if (/^0?1$/.test(v) || /^٠?١$/.test(v)) return true;
-                // أو يحتوي على كلمة أول وليس ثاني
-                if ((v.includes('أول') || v.includes('اول') || v.includes('الاول')) && !v.includes('ثاني') && !v.includes('2') && !v.includes('٢')) return true;
-                return false;
-            };
-
             rawSC04.forEach(row => {
                 let prog = row[colProgSc04] || row['التخصص'];
                 let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
                 
-                let isLevel1 = false;
-                let targetSemValue = row[colSemSc04] !== undefined ? row[colSemSc04] : (row['المستوى'] || '');
+                // استهداف العمود I مباشرة: بما أن هناك عمودين باسم "الفصل التدريبي"، 
+                // فإن المكتبة تقرأ العمود الثاني (I) برمجياً باسم "الفصل التدريبي_1"
+                let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
+                let v = String(levelValue).trim();
                 
-                // 1. التحقق الصارم من العمود المحدد
-                if (isStrictlyLevel1(targetSemValue)) {
-                    isLevel1 = true;
-                } else {
-                    // 2. بحث ذكي في باقي الأعمدة (لأن رايات أحياناً تصدر عمودين بنفس الاسم: واحد لرمز الفصل الزمني والثاني للمستوى)
-                    for (let key in row) {
-                        if (key.includes('فصل') || key.includes('مستوى') || key.includes('level')) {
-                            if (isStrictlyLevel1(row[key])) {
-                                isLevel1 = true;
-                                break;
-                            }
-                        }
+                let isLevel1 = false;
+                
+                // قراءة دقيقة وصارمة للمستوى الأول فقط
+                if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
+                    !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
+                    if (!v.includes('144') && !v.includes('145')) {
+                        isLevel1 = true;
                     }
                 }
                 
@@ -370,26 +356,25 @@ globalCRNDetails = {};
                         dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
                     }
                     
-                    // منع تكرار نفس المقرر في الحساب
                     if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
                         dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
                         
-                        // قراءة الشق النظري والعملي بدقة لمعرفة هل المقرر يحتاج CRN واحد أو اثنين
-                        let theoryRaw = row['سم'] || row['س.م'] || row['نظري'] || row['النظري'] || 0;
-                        let practicalRaw = row['ثم'] || row['ث.م'] || row['عملي'] || row['العملي'] || 0;
+                        let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
+                        let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
                         
                         let theory = parseNumber(theoryRaw);
                         let practical = parseNumber(practicalRaw);
                         
                         let parts = 1; // الافتراضي شعبة واحدة للمقرر
                         if (theory > 0 && practical > 0) {
-                            parts = 2; // المقرر له شقين (نظري + عملي) ويحتاج إسناد رقمين مرجعيين
+                            parts = 2; // نظري + عملي = يحتاج شعبتين (رقمين مرجعيين)
                         }
                         dynamicSC04Plan[cleanProg].requiredParts += parts;
                     }
                 }
             });
         }
+
         
         let rawSP15 = await readExcelFile(sp15File);
         traineesData = [];

@@ -7,8 +7,6 @@
     <title>منظومة الإسناد الآلي للمستجدين (نظام الرزم)</title>   
     <!-- مكتبات قراءة وتصدير الملفات -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
@@ -59,13 +57,9 @@
         .form-group select, .form-group input { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; }
         .form-group input:focus, .form-group select:focus { border-color: #008e7e; outline: none; }
         
-        /* التبويبات (الصفحة 3) */
-        .tabs { display: flex; flex-wrap: wrap; gap: 5px; border-bottom: 2px solid #008e7e; margin-bottom: 20px; }
-        .tab-btn { background: #eef7f6; border: 1px solid #cbe6e3; border-bottom: none; padding: 10px 15px; border-radius: 8px 8px 0 0; cursor: pointer; font-weight: 600; color: #006d60; transition: 0.3s; }
-        .tab-btn:hover { background: #d8f0ed; }
-        .tab-btn.active { background: #008e7e; color: #fff; }
-        .tab-content { display: none; overflow-x: auto;}
-        .tab-content.active { display: block; }
+        /* فلتر الصفحة 3 */
+        .filter-section { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #ddd; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 15px; }
+        .filter-section select { padding: 10px; border: 1px solid #008e7e; border-radius: 6px; font-family: inherit; font-size: 15px; font-weight: bold; min-width: 250px; outline: none; }
 
         /* الجداول */
         table.data-table { width: 100%; border-collapse: collapse; margin-top: 15px; font-size: 14px; text-align: center; }
@@ -79,10 +73,10 @@
         .badge-warning { background: #fff3cd; color: #856404; }
         .badge-danger { background: #f8d7da; color: #721c24; }
 
-        .btn-copy-rayat { background-color: #8dc63f; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.3s; display: inline-flex; align-items: center; gap: 8px; margin-bottom: 15px; }
+        .btn-copy-rayat { background-color: #8dc63f; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; font-weight: bold; cursor: pointer; transition: 0.3s; display: inline-flex; align-items: center; gap: 8px; margin: 0; }
         .btn-copy-rayat:hover { background-color: #74a629; }
 
-        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+        .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
 
         #toast { visibility: hidden; min-width: 250px; background-color: #333; color: #fff; text-align: center; border-radius: 8px; padding: 16px; position: fixed; z-index: 1000; left: 50%; bottom: 30px; transform: translateX(-50%); font-size: 15px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         #toast.show { visibility: visible; animation: fadein 0.5s, fadeout 0.5s 2.5s; }
@@ -106,7 +100,7 @@
                     <h3>إعدادات ملف قائمة المستجدين (SP15)</h3>
                     <div class="settings-row">
                         <div><label>عمود رقم المتدرب</label><input type="text" id="col_sp15_id" value="رقم المتدرب"></div>
-                        <div><label>عمود اسم المتدرب</label><input type="text" id="col_sp15_name" value="اسم المتدرب"></div>
+                        <div><label>عمود اسم المتدرب</label><input type="text" id="col_sp15_name" value="الاسم"></div>
                         <div><label>عمود التخصص/البرنامج</label><input type="text" id="col_sp15_program" value="وصف البرنامج"></div>
                     </div>
                 </div>
@@ -178,20 +172,30 @@
             </div>
         </div>
 
-        <!-- التبويبات للأقسام -->
-        <div class="tabs" id="results-tabs"></div>
-        <div id="results-content-container"></div>
+        <!-- منطقة الفلترة المنسدلة -->
+        <div class="filter-section">
+            <div>
+                <label style="color:#006d60; font-weight:bold; margin-left:10px;">تصفية حسب التخصص:</label>
+                <select id="result-program-filter" onchange="renderResultsTable()">
+                    <!-- سيتم تعبئتها برمجياً -->
+                </select>
+            </div>
+            <button class="btn-copy-rayat" onclick="copyFilteredToRayat()">📋 نسخ بيانات الجدول المعروض لرايات أوتو</button>
+        </div>
+
+        <!-- ملخص الرزم وحاويات الجداول -->
+        <div id="packages-summary-container" style="margin-bottom: 15px;"></div>
+        <div id="results-table-container" style="overflow-x: auto;"></div>
     </div>
 
     <div id="toast"></div>
 
 <script>
-    // متغيرات عامة لتخزين البيانات
+    // متغيرات عامة
     let traineesData = [];
     let uniquePrograms = [];
-    let ss01Data = [];
-    let assignmentResults = {}; // { programName: [trainees...], "Unassigned": [...] }
-
+    let packagesData = [];
+    
     // دوال قراءة الملفات
     function readExcelFile(file) {
         return new Promise((resolve, reject) => {
@@ -204,7 +208,7 @@
                     const sheet = workbook.Sheets[workbook.SheetNames[0]];
                     const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
                     
-                    // تنظيف مفاتيح الـ JSON من المسافات الزائدة
+                    // تنظيف مفاتيح الـ JSON
                     let cleanedData = json.map(row => {
                         let newRow = {};
                         for (let key in row) {
@@ -220,10 +224,9 @@
         });
     }
 
-    // الانتقال للصفحة الثانية وقراءة الملفات
+    // الانتقال للصفحة الثانية
     async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
-        const ss01File = document.getElementById('ss01File').files[0];
         const status = document.getElementById('status-1');
         
         if (!sp15File) {
@@ -242,17 +245,21 @@
 
             let rawSP15 = await readExcelFile(sp15File);
             
-            // استخراج المتدربين والبرامج
             traineesData = [];
             let programsSet = new Set();
             
             rawSP15.forEach(row => {
                 let id = row[colId];
-                let name = row[colName];
+                // استخراج ذكي للاسم لتفادي مشكلة العمود الفارغ
+                let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['Name'] || '';
                 let prog = row[colProgram];
                 
                 if (id) {
-                    traineesData.push({ id: String(id).trim(), name: name || '', program: (prog || 'غير محدد').trim() });
+                    traineesData.push({ 
+                        id: String(id).trim(), 
+                        name: name.toString().trim(), 
+                        program: (prog || 'غير محدد').trim() 
+                    });
                     if (prog) programsSet.add(prog.trim());
                 }
             });
@@ -262,9 +269,6 @@
             if (traineesData.length === 0) {
                 throw new Error(`لم يتم العثور على بيانات. تأكد من تطابق اسم عمود "رقم المتدرب".`);
             }
-
-            // قراءة ملف الجدول إذا تم إرفاقه (للتحقق مستقبلاً إذا أردت)
-            ss01Data = await readExcelFile(ss01File); 
 
             generatePackageCards();
             switchPage('page-2');
@@ -277,7 +281,7 @@
         }
     }
 
-    // توليد واجهة الرزم
+    // توليد كروت الرزم مع خيار "الكل"
     function generatePackageCards() {
         const num = parseInt(document.getElementById('num-packages').value) || 1;
         const container = document.getElementById('packages-container');
@@ -293,8 +297,10 @@
                 <div class="form-group">
                     <label>القسم / التخصص المستهدف:</label>
                     <select id="pkg-program-${i}">
-                        <option value="">-- اختر التخصص --</option>
-                        ${programOptions}
+                        <option value="الكل">الكل (جميع التخصصات)</option>
+                        <optgroup label="تخصصات محددة">
+                            ${programOptions}
+                        </optgroup>
                     </select>
                 </div>
                 <div class="form-group">
@@ -310,26 +316,25 @@
         }
     }
 
-    // تنفيذ عملية الإسناد
+    // خوارزمية التوزيع والإسناد
     function processAssignments() {
         const num = parseInt(document.getElementById('num-packages').value) || 1;
         const status = document.getElementById('status-2');
         
-        let packages = [];
+        packagesData = [];
         for (let i = 1; i <= num; i++) {
             let prog = document.getElementById(`pkg-program-${i}`).value;
             let cap = parseInt(document.getElementById(`pkg-capacity-${i}`).value) || 0;
             let crnsRaw = document.getElementById(`pkg-crns-${i}`).value;
             
             if (!prog || !crnsRaw) {
-                status.innerText = `الرجاء استكمال بيانات الرزمة رقم ${i} (التخصص والأرقام المرجعية).`;
+                status.innerText = `الرجاء استكمال بيانات الرزمة رقم ${i} (الأرقام المرجعية).`;
                 return;
             }
 
-            // تنظيف الأرقام المرجعية
             let crns = crnsRaw.split(/[\s,،]+/).filter(c => c.trim() !== "");
             
-            packages.push({
+            packagesData.push({
                 id: i,
                 program: prog,
                 maxCapacity: cap,
@@ -342,135 +347,141 @@
         document.getElementById('btnText-2').innerText = 'جارِ التوزيع...';
         status.innerText = '';
 
-        // تهيئة النتائج
-        assignmentResults = {};
-        uniquePrograms.forEach(p => assignmentResults[p] = []);
-        assignmentResults['غير مسند'] = [];
+        // تصفير إسناد المتدربين
+        traineesData.forEach(t => {
+            t.assignedPackage = null;
+            t.assignedCRNs = [];
+        });
 
-        // خوارزمية التوزيع
+        // التوزيع
         traineesData.forEach(trainee => {
             let assigned = false;
-            let progPackages = packages.filter(p => p.program === trainee.program);
+            // نبحث عن الرزم التي تطابق تخصص المتدرب، أو الرزم التي تم تحديدها للـ "الكل"
+            let availablePkgs = packagesData.filter(p => p.program === trainee.program || p.program === 'الكل');
 
-            for (let pkg of progPackages) {
+            for (let pkg of availablePkgs) {
                 if (pkg.currentCount < pkg.maxCapacity) {
                     pkg.currentCount++;
                     trainee.assignedPackage = pkg.id;
                     trainee.assignedCRNs = pkg.crns;
-                    assignmentResults[trainee.program].push(trainee);
                     assigned = true;
-                    break;
+                    break; // الخروج فور إيجاد رزمة
                 }
-            }
-
-            if (!assigned) {
-                trainee.assignedPackage = null;
-                trainee.assignedCRNs = [];
-                assignmentResults['غير مسند'].push(trainee);
             }
         });
 
-        // بناء صفحة النتائج
-        buildResultsUI(packages);
+        setupPage3();
         
         document.getElementById('loader-2').style.display = 'none';
         document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
         switchPage('page-3');
     }
 
-    // بناء وعرض الجداول في الصفحة 3
-    function buildResultsUI(packages) {
-        const tabsContainer = document.getElementById('results-tabs');
-        const contentContainer = document.getElementById('results-content-container');
+    // تجهيز القائمة المنسدلة في الصفحة 3 وبناء الجدول
+    function setupPage3() {
+        const filterSelect = document.getElementById('result-program-filter');
+        filterSelect.innerHTML = `<option value="الكل" selected>الكل (جميع المتدربين)</option>`;
         
-        tabsContainer.innerHTML = '';
-        contentContainer.innerHTML = '';
+        uniquePrograms.forEach(prog => {
+            filterSelect.innerHTML += `<option value="${prog}">${prog}</option>`;
+        });
+        
+        // إضافة خيار لغير المسندين
+        filterSelect.innerHTML += `<option value="غير مسند">المتدربين غير المسندين (السعة ممتلئة)</option>`;
 
-        let isFirst = true;
-
-        for (let prog in assignmentResults) {
-            let students = assignmentResults[prog];
-            if (students.length === 0) continue;
-
-            // بناء التبويب
-            let tabId = `tab-${prog.replace(/\s/g, '-')}`;
-            let btn = document.createElement('button');
-            btn.className = `tab-btn ${isFirst ? 'active' : ''}`;
-            btn.innerText = prog + ` (${students.length})`;
-            btn.onclick = () => activateTab(tabId, btn);
-            tabsContainer.appendChild(btn);
-
-            // بناء المحتوى
-            let contentDiv = document.createElement('div');
-            contentDiv.id = tabId;
-            contentDiv.className = `tab-content ${isFirst ? 'active' : ''}`;
-            isFirst = false;
-
-            // زر النسخ للقسم
-            let copyBtn = document.createElement('button');
-            copyBtn.className = 'btn-copy-rayat';
-            copyBtn.innerHTML = `📋 نسخ بيانات هذا القسم لرايات أوتو`;
-            copyBtn.onclick = () => copyToRayatAuto(students);
-            
-            // ملخص الرزم لهذا القسم
-            let summaryHTML = '';
-            if (prog !== 'غير مسند') {
-                let progPkgs = packages.filter(p => p.program === prog);
-                summaryHTML = `<div style="display:flex; gap:10px; margin-bottom:15px; flex-wrap:wrap;">`;
-                progPkgs.forEach(p => {
-                    let isFull = p.currentCount >= p.maxCapacity;
-                    let color = isFull ? '#dc3545' : '#008e7e';
-                    summaryHTML += `<div style="background:#fff; border:1px solid ${color}; padding:10px; border-radius:6px; font-size:13px; font-weight:bold;">
-                        رزمة ${p.id}: مستخدم ${p.currentCount} من ${p.maxCapacity}
-                    </div>`;
-                });
-                summaryHTML += `</div>`;
-            }
-
-            // الجدول
-            let tableHTML = `
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>رقم المتدرب</th>
-                            <th>اسم المتدرب</th>
-                            <th>الرزمة المخصصة</th>
-                            <th>الأرقام المرجعية للجدول</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-
-            students.forEach(st => {
-                let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند (السعة ممتلئة)</span>`;
-                let crnsText = st.assignedCRNs.length > 0 ? 
-                    st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') 
-                    : '-';
-
-                tableHTML += `
-                    <tr>
-                        <td>${st.id}</td>
-                        <td>${st.name}</td>
-                        <td>${pkgText}</td>
-                        <td>${crnsText}</td>
-                    </tr>
-                `;
-            });
-            tableHTML += `</tbody></table>`;
-
-            contentDiv.innerHTML = summaryHTML;
-            if(prog !== 'غير مسند') contentDiv.insertBefore(copyBtn, contentDiv.firstChild);
-            contentDiv.innerHTML += tableHTML;
-            
-            contentContainer.appendChild(contentDiv);
-        }
+        renderResultsTable();
     }
 
-    // دالة نسخ البيانات لرايات أوتو (رقم المتدرب + tab + CRNs)
-    function copyToRayatAuto(students) {
+    // بناء وعرض الجدول بناءً على اختيار القائمة المنسدلة
+    function renderResultsTable() {
+        const selectedProg = document.getElementById('result-program-filter').value;
+        const container = document.getElementById('results-table-container');
+        const summaryContainer = document.getElementById('packages-summary-container');
+        
+        let filteredTrainees = [];
+        
+        if (selectedProg === 'الكل') {
+            filteredTrainees = traineesData;
+        } else if (selectedProg === 'غير مسند') {
+            filteredTrainees = traineesData.filter(t => t.assignedPackage === null);
+        } else {
+            filteredTrainees = traineesData.filter(t => t.program === selectedProg);
+        }
+
+        // بناء ملخص الرزم المعروضة (فقط إذا لم يكن الخيار "غير مسند")
+        summaryContainer.innerHTML = '';
+        if (selectedProg !== 'غير مسند') {
+            let relevantPkgs = selectedProg === 'الكل' ? packagesData : packagesData.filter(p => p.program === selectedProg || p.program === 'الكل');
+            
+            if (relevantPkgs.length > 0) {
+                let sumHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap;">`;
+                relevantPkgs.forEach(p => {
+                    let isFull = p.currentCount >= p.maxCapacity;
+                    let color = isFull ? '#dc3545' : '#008e7e';
+                    sumHTML += `<div style="background:#fff; border:1px solid ${color}; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:bold; color:#333;">
+                        📦 رزمة ${p.id} (${p.program}): مستخدم <span style="color:${color}">${p.currentCount}</span> من ${p.maxCapacity}
+                    </div>`;
+                });
+                sumHTML += `</div>`;
+                summaryContainer.innerHTML = sumHTML;
+            }
+        }
+
+        // بناء الجدول
+        if (filteredTrainees.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:30px; font-weight:bold; color:#666;">لا يوجد متدربين في هذا التصنيف.</div>';
+            return;
+        }
+
+        let tableHTML = `
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>رقم المتدرب</th>
+                        <th>اسم المتدرب</th>
+                        <th>التخصص</th>
+                        <th>الرزمة</th>
+                        <th>الأرقام المرجعية (CRNs)</th>
+                    </tr>
+                </thead>
+                <tbody>
+        `;
+
+        filteredTrainees.forEach(st => {
+            let pkgText = st.assignedPackage ? `رزمة ${st.assignedPackage}` : `<span class="badge badge-danger">لم يسند (الرزم ممتلئة)</span>`;
+            let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
+                st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') 
+                : '-';
+
+            tableHTML += `
+                <tr>
+                    <td>${st.id}</td>
+                    <td>${st.name || 'غير متوفر'}</td>
+                    <td>${st.program}</td>
+                    <td>${pkgText}</td>
+                    <td>${crnsText}</td>
+                </tr>
+            `;
+        });
+        tableHTML += `</tbody></table>`;
+        container.innerHTML = tableHTML;
+    }
+
+    // دالة نسخ البيانات لرايات أوتو
+    function copyFilteredToRayat() {
+        const selectedProg = document.getElementById('result-program-filter').value;
         let textToCopy = "";
         
-        students.forEach(st => {
+        let targetTrainees = [];
+        if (selectedProg === 'الكل') {
+            targetTrainees = traineesData;
+        } else if (selectedProg === 'غير مسند') {
+            targetTrainees = traineesData.filter(t => t.assignedPackage === null);
+        } else {
+            targetTrainees = traineesData.filter(t => t.program === selectedProg);
+        }
+        
+        targetTrainees.forEach(st => {
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
                 // دمج رقم المتدرب مع الأرقام المرجعية مفصولة بـ Tab
                 let line = st.id + '\t' + st.assignedCRNs.join('\t');
@@ -479,7 +490,7 @@
         });
 
         if (textToCopy.trim() === "") {
-            showToast('لا توجد بيانات لنسخها في هذا القسم!');
+            showToast('لا توجد بيانات مسندة للنسخ في الجدول المعروض!');
             return;
         }
 
@@ -489,14 +500,6 @@
             console.error('فشل النسخ: ', err);
             showToast('❌ حدث خطأ أثناء النسخ');
         });
-    }
-
-    // التبديل بين التبويبات
-    function activateTab(tabId, btnElement) {
-        document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-        document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-        btnElement.classList.add('active');
-        document.getElementById(tabId).classList.add('active');
     }
 
     // التبديل بين الصفحات

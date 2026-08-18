@@ -315,41 +315,54 @@ globalCRNDetails = {};
 // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
         const sc04File = document.getElementById('sc04File').files[0];
         dynamicSC04Plan = {};
-        isSc04Attached = !!sc04File; // حفظ حالة إرفاق الملف
+        isSc04Attached = !!sc04File; 
 
         if (isSc04Attached) {
             let rawSC04 = await readExcelFile(sc04File);
             const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
             const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
+            const colSemSc04 = document.getElementById('col_sc04_semester') ? document.getElementById('col_sc04_semester').value.trim() : 'الفصل التدريبي';
             
             rawSC04.forEach(row => {
                 let prog = row[colProgSc04] || row['التخصص'];
                 let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+                let sem = String(row[colSemSc04] || row['المستوى'] || '').trim();
+                
+                // تنظيف القيم من أرقام الفصول الزمنية (مثل 14451) لمنع قراءتها بالخطأ كمستوى أول
+                let cleanSem = sem.replace(/14\d{3}/g, '').replace(/202\d/g, '');
                 
                 let isLevel1 = false;
-                let semKeys = Object.keys(row).filter(k => k.includes('الفصل'));
-                
-                for (let key of semKeys) {
-                    let val = String(row[key]).trim();
-                    // ذكاء إضافي: يبحث عن 1، أو ١ (بالعربي)، أو أول، أو اول.. ويتجاهل الفصول الزمنية (144)
-                    if ((val.includes('1') || val.includes('١') || val.includes('أول') || val.includes('اول')) && !val.startsWith('144')) {
+                // البحث الدقيق عن المستوى الأول فقط
+                if (cleanSem.includes('أول') || cleanSem.includes('اول') || cleanSem.includes('1') || cleanSem.includes('١')) {
+                    if (!cleanSem.includes('2') && !cleanSem.includes('٢') && !cleanSem.includes('ثاني') && !cleanSem.includes('الثاني')) {
                         isLevel1 = true;
-                        break;
                     }
                 }
-
+                
                 if (prog && course && isLevel1) {
                     let cleanProg = prog.trim();
+                    let cleanCourse = course.trim();
+                    
                     if (!dynamicSC04Plan[cleanProg]) {
-                        dynamicSC04Plan[cleanProg] = new Set();
+                        // requiredParts: إجمالي الأرقام المرجعية (الشعب) المطلوبة بناءً على النظري والعملي
+                        dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
                     }
-                    dynamicSC04Plan[cleanProg].add(course.trim());
+                    
+                    if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
+                        dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
+                        
+                        // التحقق من الشق النظري والعملي لحساب عدد الشعب المطلوبة للمقرر
+                        let theory = parseFloat(row['سم'] || row['نظري'] || 0);
+                        let practical = parseFloat(row['ثم'] || row['عملي'] || 0);
+                        
+                        let parts = 1; // الافتراضي شعبة واحدة
+                        if (theory > 0 && practical > 0) {
+                            parts = 2; // المقرر له شقين ويحتاج إسناد رقمين مرجعيين (CRNs)
+                        }
+                        dynamicSC04Plan[cleanProg].requiredParts += parts;
+                    }
                 }
             });
-            
-            for (let p in dynamicSC04Plan) {
-                dynamicSC04Plan[p] = dynamicSC04Plan[p].size;
-            }
         }
         let rawSP15 = await readExcelFile(sp15File);
         traineesData = [];
@@ -634,14 +647,13 @@ function loadPackagesFromLocal() {
             }
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
 
-            // 2. التحقق من الخطة الديناميكية والمطابقة الذكية
-            let uniqueCoursesCount = countedCourses.size; 
+              // 2. التحقق من الخطة الديناميكية والمطابقة الذكية للشقين النظري والعملي
+            let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; // إجمالي الشعب التي أُسندت للمتدرب
             let planStatusHtml = `<td>-</td>`;
             
             if (st.program) {
                 let programClean = st.program.trim();
                 
-                // الاعتماد على المتغير الجديد للتحقق من إرفاق الملف
                 if (!isSc04Attached) {
                     planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يُرفق SC04</span></td>`;
                 } 
@@ -649,33 +661,35 @@ function loadPackagesFromLocal() {
                     planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">لم يعثر على خطة للمستوى الأول بالملف</span></td>`;
                 }
                 else {
-                    let requiredCount = null;
+                    let planData = null;
                     
                     if (dynamicSC04Plan.hasOwnProperty(programClean)) {
-                        requiredCount = dynamicSC04Plan[programClean];
+                        planData = dynamicSC04Plan[programClean];
                     } else {
                         let planKeys = Object.keys(dynamicSC04Plan);
                         for (let key of planKeys) {
                             if (programClean.includes(key) || key.includes(programClean)) {
-                                requiredCount = dynamicSC04Plan[key];
+                                planData = dynamicSC04Plan[key];
                                 break;
                             }
                         }
                     }
 
-                    if (requiredCount !== null) {
+                    if (planData) {
+                        let requiredParts = planData.requiredParts; // إجمالي الشعب المطلوبة للمستوى الأول
+                        
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
-                        else if (uniqueCoursesCount === requiredCount) {
-                            planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
-                        } else if (uniqueCoursesCount < requiredCount) {
-                            planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                        else if (studentPartsCount === requiredParts) {
+                            planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
+                        } else if (studentPartsCount < requiredParts) {
+                            planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
                         }
                     } else {
-                        planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة (${uniqueCoursesCount} مقرر)</span></td>`;
+                        planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;
                     }
                 }
             }

@@ -267,12 +267,14 @@ globalCRNDetails = {};
                 let crn = String(row[colCrn]).trim();
                 if (crn && crn !== 'undefined') {
                     let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
+                    let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
+                    let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
                     
                     if (!globalCRNDetails[crn]) {
                         globalCRNDetails[crn] = {
                             course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
                             name: row['اسم المقرر'] || '',
-                            type: row['نوع الشعبة'] || row['نوع الجدول'] || '', // جلب نوع الشعبة لتمييز النظري عن العملي
+                            type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
                             hours: currentHours, 
                             parts: [] 
                         };
@@ -280,10 +282,15 @@ globalCRNDetails = {};
                         globalCRNDetails[crn].hours = Math.max(globalCRNDetails[crn].hours, currentHours);
                     }
                     
-                    globalCRNDetails[crn].parts.push({
-                        time: row['الوقت'] || row['Time'] || 'غير محدد',
-                        days: row['اليوم'] || row['Days'] || 'غير محدد'
-                    });
+                    // كود ذكي لمنع التدبيل: يتحقق إذا كان الوقت واليوم مسجلين مسبقاً لنفس الرقم المرجعي
+                    let isDuplicate = globalCRNDetails[crn].parts.some(p => p.time === timeStr && p.days === daysStr);
+                    
+                    if (!isDuplicate) {
+                        globalCRNDetails[crn].parts.push({
+                            time: timeStr,
+                            days: daysStr
+                        });
+                    }
                 }
             });
         }
@@ -643,18 +650,16 @@ function openScheduleModal(studentName, crnsArray) {
     document.getElementById('modal-title').innerText = `الجدول العرضي: ${studentName}`;
     const content = document.getElementById('modal-content-area');
     
-    // بناء مصفوفة للأيام
     let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
     let notFoundCRNs = [];
 
-crnsArray.forEach(crn => {
+    crnsArray.forEach(crn => {
         let details = globalCRNDetails[crn.trim()];
         if (details) {
             details.parts.forEach(part => {
                 let dayStr = String(part.days).replace(/\s/g, '');
                 let isMapped = false;
                 
-                // تمييز اسم المقرر بنوع الشعبة إذا توفر (مثال: شبكا-222 - نظري صباحي)
                 let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
                 let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time };
 
@@ -670,16 +675,27 @@ crnsArray.forEach(crn => {
             notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
         }
     });
-    
+
     let html = `<table class="schedule-h-table"><tbody>`;
+    
+    // دالة لاستخراج وقت البداية لترتيب الجدول زمنياً
+    function getStartTime(timeString) {
+        let match = timeString.match(/\d+/);
+        return match ? parseInt(match[0], 10) : 9999;
+    }
     
     for (let day in daysMap) {
         if (daysMap[day].length > 0) {
-            html += `<tr><th>${day}</th><td style="text-align:right;">`;
+            
+            // ترتيب المقررات حسب الوقت (الأبدر أولاً)
+            daysMap[day].sort((a, b) => getStartTime(a.time) - getStartTime(b.time));
+
+            html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
             daysMap[day].forEach(course => {
+                // تم وضع الوقت داخل span بخصائص dir="ltr" لمنع انعكاس الأرقام
                 html += `<div class="course-badge">
                             <strong>${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
-                            <span class="time">🕒 ${course.time}</span>
+                            <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
                          </div>`;
             });
             html += `</td></tr>`;
@@ -690,7 +706,7 @@ crnsArray.forEach(crn => {
     if (notFoundCRNs.length > 0) {
         html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها (أو غير مسجلة بـ SS01):</h4><ul>`;
         notFoundCRNs.forEach(c => {
-            html += `<li><strong>${c.crn}</strong>: ${c.course} - ${c.time}</li>`;
+            html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`;
         });
         html += `</ul>`;
     }

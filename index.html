@@ -646,7 +646,7 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-     // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
+  // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
             let studentCoursesMap = {};
             
@@ -661,11 +661,13 @@ function loadPackagesFromLocal() {
                     if (globalCRNDetails[crnClean]) {
                         let rawCourse = globalCRNDetails[crnClean].course;
                         let normCourse = normalizeCode(rawCourse);
+                        // نأخذ الساعات المعتمدة من ملف SS01
                         let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
                         
                         if (!studentCoursesMap[normCourse]) {
                             studentCoursesMap[normCourse] = { count: 0, maxHours: hrs };
                         } else {
+                            // نأخذ أعلى قيمة للساعات (لأن رايات تكررها في العملي والنظري)
                             studentCoursesMap[normCourse].maxHours = Math.max(studentCoursesMap[normCourse].maxHours, hrs);
                         }
                         studentCoursesMap[normCourse].count += 1;
@@ -678,15 +680,34 @@ function loadPackagesFromLocal() {
                 let assignedCount = studentCoursesMap[normCourse].count; // كم شعبة مسجلة للمتدرب
                 let courseHours = studentCoursesMap[normCourse].maxHours; // الساعات المعتمدة للمقرر
                 
+                // نسأل القاموس: كم شعبة يحتاج هذا المقرر؟ (إذا لم يوجد نفترض 1)
                 let requiredCountForCourse = window.globalCourseRequirements ? (window.globalCourseRequirements[normCourse] || 1) : 1;
                 
+                // الصرامة هنا: إذا كانت الشعب المسجلة أقل من المطلوبة (مثلاً 1 من 2) لن تضاف الساعات!
                 if (assignedCount >= requiredCountForCourse) {
                     totalHours += courseHours;
                 }
             }
 
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
-            
+
+            // --- استرجاع المتغير planData الذي كان مفقوداً لمعرفة حالة الخطة ---
+            let planData = null;
+            if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
+                let programClean = st.program.trim();
+                if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                    planData = dynamicSC04Plan[programClean];
+                } else {
+                    let planKeys = Object.keys(dynamicSC04Plan);
+                    for (let key of planKeys) {
+                        if (programClean.includes(key) || key.includes(programClean)) {
+                            planData = dynamicSC04Plan[key];
+                            break;
+                        }
+                    }
+                }
+            }
+
             // 2. التحقق من الخطة الديناميكية والمطابقة الذكية للشقين النظري والعملي
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
             let planStatusHtml = `<td>-</td>`;

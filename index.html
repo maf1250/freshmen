@@ -225,6 +225,8 @@
     let packagesData = [];
     let dynamicSC04Plan = {};
     let isSc04Attached = false;
+    let globalCRNDetails = {}; 
+
     // دوال قراءة الملفات
     function readExcelFile(file) {
         return new Promise((resolve, reject) => {
@@ -253,256 +255,243 @@
         });
     }
 
-    let globalCRNDetails = {}; // لجدول العرض الأفقي
-    
     // الانتقال للصفحة الثانية
-  async function goToPage2() {
-    const sp15File = document.getElementById('sp15File').files[0];
-    const ss01File = document.getElementById('ss01File').files[0];
-    const status = document.getElementById('status-1');
-    
-    if (!sp15File) { status.innerText = 'الرجاء إرفاق تقرير قائمة المستجدين (SP15)'; return; }
-
-    document.getElementById('loader-1').style.display = 'inline-block';
-    document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
-    status.innerText = '';
-
-    try {
-        const colId = document.getElementById('col_sp15_id').value.trim();
-        const colName = document.getElementById('col_sp15_name').value.trim();
-        const colProgram = document.getElementById('col_sp15_program').value.trim();
+    async function goToPage2() {
+        const sp15File = document.getElementById('sp15File').files[0];
+        const ss01File = document.getElementById('ss01File').files[0];
+        const status = document.getElementById('status-1');
         
-        // استخراج بيانات SS01 للجدول العرضي وحساب الساعات
-        if (ss01File) {
-            let rawSS01 = await readExcelFile(ss01File);
-            const colCrn = document.getElementById('col_ss01_crn').value.trim();
-            const colCourse = document.getElementById('col_ss01_course').value.trim();
-            const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
+        if (!sp15File) { status.innerText = 'الرجاء إرفاق ملف قائمة المستجدين (SP15)'; return; }
+
+        document.getElementById('loader-1').style.display = 'inline-block';
+        document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
+        status.innerText = '';
+
+        try {
+            const colId = document.getElementById('col_sp15_id').value.trim();
+            const colName = document.getElementById('col_sp15_name').value.trim();
+            const colProgram = document.getElementById('col_sp15_program').value.trim();
             
-globalCRNDetails = {};
-            rawSS01.forEach(row => {
-                let crn = String(row[colCrn]).trim();
-                if (crn && crn !== 'undefined') {
-                    let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
-                    let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
-                    let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
-                    
-                    if (!globalCRNDetails[crn]) {
-                        globalCRNDetails[crn] = {
-                            course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
-                            name: row['اسم المقرر'] || '',
-                            type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
-                            hours: currentHours, 
-                            parts: [] 
-                        };
-                    } else {
-                        globalCRNDetails[crn].hours = Math.max(globalCRNDetails[crn].hours, currentHours);
-                    }
-                    
-                    // كود ذكي لمنع التدبيل: يتحقق إذا كان الوقت واليوم مسجلين مسبقاً لنفس الرقم المرجعي
-                    let isDuplicate = globalCRNDetails[crn].parts.some(p => p.time === timeStr && p.days === daysStr);
-                    
-                    if (!isDuplicate) {
-                        globalCRNDetails[crn].parts.push({
-                            time: timeStr,
-                            days: daysStr
-                        });
-                    }
-                }
-            });
-        }
-
-// معالجة تقرير الخطة SC04 وحساب مقررات الفصل الأول بذكاء
-        const sc04File = document.getElementById('sc04File').files[0];
-        dynamicSC04Plan = {};
-        window.globalCourseRequirements = {}; // قاموس عالمي ذكي لمعرفة احتياج كل مقرر (شعبة أو شعبتين)
-        isSc04Attached = !!sc04File; 
-
-        if (isSc04Attached) {
-            let rawSC04 = await readExcelFile(sc04File);
-            const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
-            const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
-            
-            const parseNumber = (val) => {
-                if (!val) return 0;
-                let v = String(val).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
-                return parseFloat(v) || 0;
-            };
-
-            const normalizeCode = (code) => {
-                if (!code) return '';
-                return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
-            };
-
-            rawSC04.forEach(row => {
-                let prog = row[colProgSc04] || row['التخصص'];
-                let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+            // استخراج بيانات SS01 للجدول العرضي وحساب الساعات
+            if (ss01File) {
+                let rawSS01 = await readExcelFile(ss01File);
+                const colCrn = document.getElementById('col_ss01_crn').value.trim();
+                const colCourse = document.getElementById('col_ss01_course').value.trim();
+                const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
                 
-                let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
-                let v = String(levelValue).trim();
-                
-                let isLevel1 = false;
-                if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
-                    !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
-                    if (!v.includes('144') && !v.includes('145')) {
-                        isLevel1 = true;
-                    }
-                }
-                
-                if (prog && course && isLevel1) {
-                    let cleanProg = prog.trim();
-                    let cleanCourse = course.trim();
-                    let normCourse = normalizeCode(cleanCourse); // توحيد الرمز
-                    
-                    if (!dynamicSC04Plan[cleanProg]) {
-                        dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
-                    }
-                    
-                    if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
-                        dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
+                globalCRNDetails = {};
+                rawSS01.forEach(row => {
+                    let crn = String(row[colCrn]).trim();
+                    if (crn && crn !== 'undefined') {
+                        let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
+                        let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
+                        let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
                         
-                        let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
-                        let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
-                        
-                        let theory = parseNumber(theoryRaw);
-                        let practical = parseNumber(practicalRaw);
-                        
-                        let parts = 1; 
-                        if (theory > 0 && practical > 0) {
-                            parts = 2; // المقرر يحتاج نظري وعملي
+                        if (!globalCRNDetails[crn]) {
+                            globalCRNDetails[crn] = {
+                                course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
+                                name: row['اسم المقرر'] || '',
+                                type: row['نوع الشعبة'] || row['نوع الجدول'] || '', 
+                                hours: currentHours, 
+                                parts: [] 
+                            };
+                        } else {
+                            globalCRNDetails[crn].hours = Math.max(globalCRNDetails[crn].hours, currentHours);
                         }
                         
-                        dynamicSC04Plan[cleanProg].requiredParts += parts;
-                        
-                        // حفظ عدد الشعب المطلوبة لهذا المقرر في القاموس العالمي
-                        window.globalCourseRequirements[normCourse] = parts;
+                        let isDuplicate = globalCRNDetails[crn].parts.some(p => p.time === timeStr && p.days === daysStr);
+                        if (!isDuplicate) {
+                            globalCRNDetails[crn].parts.push({ time: timeStr, days: daysStr });
+                        }
                     }
+                });
+            }
+
+            // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
+            const sc04File = document.getElementById('sc04File').files[0];
+            dynamicSC04Plan = {};
+            window.globalCourseRequirements = {}; 
+            isSc04Attached = !!sc04File; 
+
+            if (isSc04Attached) {
+                let rawSC04 = await readExcelFile(sc04File);
+                const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
+                const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
+                
+                const parseNumber = (val) => {
+                    if (!val) return 0;
+                    let v = String(val).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
+                    return parseFloat(v) || 0;
+                };
+
+                const normalizeCode = (code) => {
+                    if (!code) return '';
+                    return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+                };
+
+                rawSC04.forEach(row => {
+                    let prog = row[colProgSc04] || row['التخصص'];
+                    let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+                    
+                    let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
+                    let v = String(levelValue).trim();
+                    
+                    let isLevel1 = false;
+                    if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
+                        !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
+                        if (!v.includes('144') && !v.includes('145')) {
+                            isLevel1 = true;
+                        }
+                    }
+                    
+                    if (prog && course && isLevel1) {
+                        let cleanProg = prog.trim();
+                        let cleanCourse = course.trim();
+                        let normCourse = normalizeCode(cleanCourse); 
+                        
+                        if (!dynamicSC04Plan[cleanProg]) {
+                            dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
+                        }
+                        
+                        if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
+                            dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
+                            
+                            let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
+                            let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
+                            
+                            let theory = parseNumber(theoryRaw);
+                            let practical = parseNumber(practicalRaw);
+                            
+                            let parts = 1; 
+                            if (theory > 0 && practical > 0) {
+                                parts = 2; 
+                            }
+                            
+                            dynamicSC04Plan[cleanProg].requiredParts += parts;
+                            window.globalCourseRequirements[normCourse] = parts;
+                        }
+                    }
+                });
+            }
+
+            let rawSP15 = await readExcelFile(sp15File);
+            traineesData = [];
+            let programsSet = new Set();
+            
+            rawSP15.forEach(row => {
+                let id = row[colId];
+                let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
+                let prog = row[colProgram];
+                if (id) {
+                    traineesData.push({ id: String(id).trim(), name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
+                    if (prog) programsSet.add(prog.trim());
                 }
             });
+
+            uniquePrograms = Array.from(programsSet).sort();
+            if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات المتدربين.`);
+
+            generatePackageCards();
+            loadPackagesFromLocal();
+            switchPage('page-2');
+
+        } catch (error) { status.innerText = error.message; } 
+        finally {
+            document.getElementById('loader-1').style.display = 'none';
+            document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
         }
-        
-        let rawSP15 = await readExcelFile(sp15File);
-        traineesData = [];
-        let programsSet = new Set();
-        
-        rawSP15.forEach(row => {
-            let id = row[colId];
-            // إضافة "إسم المتدرب" بالهمزة لحل مشكلة (غير متوفر)
-            let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
-            let prog = row[colProgram];
-            if (id) {
-                traineesData.push({ id: String(id).trim(), name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
-                if (prog) programsSet.add(prog.trim());
-            }
-        });
-
-        uniquePrograms = Array.from(programsSet).sort();
-        if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات المتدربين.`);
-
-        generatePackageCards();
-        loadPackagesFromLocal();
-        switchPage('page-2');
-
-    } catch (error) { status.innerText = error.message; } 
-    finally {
-        document.getElementById('loader-1').style.display = 'none';
-        document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
     }
-}
     
-    // توليد كروت الرزم مع خيار "الكل"
+    // توليد كروت الرزم 
     function generatePackageCards() {
-    const numInput = document.getElementById('num-packages');
-    const num = parseInt(numInput.value) || 1;
-    const container = document.getElementById('packages-container');
+        const numInput = document.getElementById('num-packages');
+        const num = parseInt(numInput.value) || 1;
+        const container = document.getElementById('packages-container');
 
-    // حفظ البيانات الموجودة حالياً في الشاشة قبل المسح
-    let tempSavedData = {};
-    for (let i = 1; i <= 50; i++) {
-        let prog = document.getElementById(`pkg-program-${i}`);
-        let cap = document.getElementById(`pkg-capacity-${i}`);
-        let crns = document.getElementById(`pkg-crns-${i}`);
-        if (prog && cap && crns) {
-            tempSavedData[i] = { prog: prog.value, cap: cap.value, crns: crns.value };
+        let tempSavedData = {};
+        for (let i = 1; i <= 50; i++) {
+            let prog = document.getElementById(`pkg-program-${i}`);
+            let cap = document.getElementById(`pkg-capacity-${i}`);
+            let crns = document.getElementById(`pkg-crns-${i}`);
+            if (prog && cap && crns) {
+                tempSavedData[i] = { prog: prog.value, cap: cap.value, crns: crns.value };
+            }
         }
-    }
 
-    container.innerHTML = '';
-    let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
+        container.innerHTML = '';
+        let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
 
-    for (let i = 1; i <= num; i++) {
-        let card = document.createElement('div');
-        card.className = 'package-card';
-        card.innerHTML = `
-            <h3>رزمة رقم ${i}</h3>
-            <div class="form-group">
-                <label>التخصص المستهدف:</label>
-                <select id="pkg-program-${i}" onchange="savePackagesToLocal()">
-                    <option value="الكل">الكل (جميع التخصصات)</option>
-                    <optgroup label="تخصصات محددة">${programOptions}</optgroup>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>السعة القصوى للمتدربين بالرزمة:</label>
-                <input type="number" id="pkg-capacity-${i}" min="1" value="20" onchange="savePackagesToLocal()">
-            </div>
-            <div class="form-group">
-                <label>الأرقام المرجعية (CRNs):</label>
-                <input type="text" id="pkg-crns-${i}" placeholder="افصل بين الارقام بمسافة أو فاصلة مثال: 12345 12346" onchange="savePackagesToLocal()">
-            </div>
-        `;
-        container.appendChild(card);
+        for (let i = 1; i <= num; i++) {
+            let card = document.createElement('div');
+            card.className = 'package-card';
+            card.innerHTML = `
+                <h3>رزمة رقم ${i}</h3>
+                <div class="form-group">
+                    <label>التخصص المستهدف:</label>
+                    <select id="pkg-program-${i}" onchange="savePackagesToLocal()">
+                        <option value="الكل">الكل (جميع التخصصات)</option>
+                        <optgroup label="تخصصات محددة">${programOptions}</optgroup>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>السعة القصوى:</label>
+                    <input type="number" id="pkg-capacity-${i}" min="1" value="20" onchange="savePackagesToLocal()">
+                </div>
+                <div class="form-group">
+                    <label>الأرقام المرجعية (CRNs):</label>
+                    <input type="text" id="pkg-crns-${i}" placeholder="مثال: 12345 12346" onchange="savePackagesToLocal()">
+                </div>
+            `;
+            container.appendChild(card);
 
-        // استرجاع البيانات المحفوظة للرزمة إن وجدت
-        if (tempSavedData[i]) {
-            setTimeout(() => {
-                document.getElementById(`pkg-program-${i}`).value = tempSavedData[i].prog;
-                document.getElementById(`pkg-capacity-${i}`).value = tempSavedData[i].cap;
-                document.getElementById(`pkg-crns-${i}`).value = tempSavedData[i].crns;
-            }, 0);
+            if (tempSavedData[i]) {
+                setTimeout(() => {
+                    document.getElementById(`pkg-program-${i}`).value = tempSavedData[i].prog;
+                    document.getElementById(`pkg-capacity-${i}`).value = tempSavedData[i].cap;
+                    document.getElementById(`pkg-crns-${i}`).value = tempSavedData[i].crns;
+                }, 0);
+            }
         }
+        
+        localStorage.setItem('numPackages', num);
+        savePackagesToLocal();
     }
-    
-    // حفظ العدد والبيانات في المتصفح
-    localStorage.setItem('numPackages', num);
-    savePackagesToLocal();
-}
 
     function savePackagesToLocal() {
-    const num = parseInt(document.getElementById('num-packages').value) || 1;
-    let pkgs = [];
-    for (let i = 1; i <= num; i++) {
-        let prog = document.getElementById(`pkg-program-${i}`);
-        let cap = document.getElementById(`pkg-capacity-${i}`);
-        let crns = document.getElementById(`pkg-crns-${i}`);
-        if (prog) {
-            pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
+        const num = parseInt(document.getElementById('num-packages').value) || 1;
+        let pkgs = [];
+        for (let i = 1; i <= num; i++) {
+            let prog = document.getElementById(`pkg-program-${i}`);
+            let cap = document.getElementById(`pkg-capacity-${i}`);
+            let crns = document.getElementById(`pkg-crns-${i}`);
+            if (prog) {
+                pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
+            }
+        }
+        localStorage.setItem('savedPackages', JSON.stringify(pkgs));
+    }
+
+    function loadPackagesFromLocal() {
+        let savedNum = localStorage.getItem('numPackages');
+        let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
+        
+        if (savedNum && savedPkgs) {
+            document.getElementById('num-packages').value = savedNum;
+            generatePackageCards(); 
+            
+            setTimeout(() => {
+                savedPkgs.forEach(pkg => {
+                    let progEl = document.getElementById(`pkg-program-${pkg.id}`);
+                    let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
+                    let crnsEl = document.getElementById(`pkg-crns-${pkg.id}`);
+                    
+                    if (progEl) progEl.value = pkg.prog;
+                    if (capEl) capEl.value = pkg.cap;
+                    if (crnsEl) crnsEl.value = pkg.crns;
+                });
+            }, 50);
         }
     }
-    localStorage.setItem('savedPackages', JSON.stringify(pkgs));
-}
-
-function loadPackagesFromLocal() {
-    let savedNum = localStorage.getItem('numPackages');
-    let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
-    
-    if (savedNum && savedPkgs) {
-        document.getElementById('num-packages').value = savedNum;
-        generatePackageCards(); // سيقوم ببناء الكروت
-        
-        setTimeout(() => {
-            savedPkgs.forEach(pkg => {
-                let progEl = document.getElementById(`pkg-program-${pkg.id}`);
-                let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
-                let crnsEl = document.getElementById(`pkg-crns-${pkg.id}`);
-                
-                if (progEl) progEl.value = pkg.prog;
-                if (capEl) capEl.value = pkg.cap;
-                if (crnsEl) crnsEl.value = pkg.crns;
-            });
-        }, 50);
-    }
-}
 
     // خوارزمية التوزيع والإسناد
     function processAssignments() {
@@ -535,72 +524,50 @@ function loadPackagesFromLocal() {
         document.getElementById('btnText-2').innerText = 'جارِ التوزيع...';
         status.innerText = '';
 
-        // تصفير إسناد المتدربين
         traineesData.forEach(t => {
             t.assignedPackage = null;
             t.assignedCRNs = [];
         });
 
-        // التوزيع
         traineesData.forEach(trainee => {
-            let assigned = false;
-            // نبحث عن الرزم التي تطابق تخصص المتدرب، أو الرزم التي تم تحديدها للـ "الكل"
             let availablePkgs = packagesData.filter(p => p.program === trainee.program || p.program === 'الكل');
-
             for (let pkg of availablePkgs) {
                 if (pkg.currentCount < pkg.maxCapacity) {
                     pkg.currentCount++;
                     trainee.assignedPackage = pkg.id;
                     trainee.assignedCRNs = pkg.crns;
-                    assigned = true;
-                    break; // الخروج فور إيجاد رزمة
+                    break;
                 }
             }
         });
 
         setupPage3();
-        
         document.getElementById('loader-2').style.display = 'none';
         document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
         switchPage('page-3');
     }
 
-    // تجهيز القائمة المنسدلة في الصفحة 3 وبناء الجدول
     function setupPage3() {
         const filterSelect = document.getElementById('result-program-filter');
         filterSelect.innerHTML = `<option value="الكل" selected>الكل (جميع المتدربين)</option>`;
-        
-        uniquePrograms.forEach(prog => {
-            filterSelect.innerHTML += `<option value="${prog}">${prog}</option>`;
-        });
-        
-        // إضافة خيار لغير المسندين
+        uniquePrograms.forEach(prog => { filterSelect.innerHTML += `<option value="${prog}">${prog}</option>`; });
         filterSelect.innerHTML += `<option value="غير مسند">المتدربين غير المسندين (السعة ممتلئة)</option>`;
-
         renderResultsTable();
     }
 
-    // بناء وعرض الجدول بناءً على اختيار القائمة المنسدلة
     function renderResultsTable() {
         const selectedProg = document.getElementById('result-program-filter').value;
         const container = document.getElementById('results-table-container');
         const summaryContainer = document.getElementById('packages-summary-container');
         
         let filteredTrainees = [];
-        
-        if (selectedProg === 'الكل') {
-            filteredTrainees = traineesData;
-        } else if (selectedProg === 'غير مسند') {
-            filteredTrainees = traineesData.filter(t => t.assignedPackage === null);
-        } else {
-            filteredTrainees = traineesData.filter(t => t.program === selectedProg);
-        }
+        if (selectedProg === 'الكل') filteredTrainees = traineesData;
+        else if (selectedProg === 'غير مسند') filteredTrainees = traineesData.filter(t => t.assignedPackage === null);
+        else filteredTrainees = traineesData.filter(t => t.program === selectedProg);
 
-        // بناء ملخص الرزم المعروضة (فقط إذا لم يكن الخيار "غير مسند")
         summaryContainer.innerHTML = '';
         if (selectedProg !== 'غير مسند') {
             let relevantPkgs = selectedProg === 'الكل' ? packagesData : packagesData.filter(p => p.program === selectedProg || p.program === 'الكل');
-            
             if (relevantPkgs.length > 0) {
                 let sumHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap;">`;
                 relevantPkgs.forEach(p => {
@@ -615,12 +582,12 @@ function loadPackagesFromLocal() {
             }
         }
 
-        // بناء الجدول
         if (filteredTrainees.length === 0) {
             container.innerHTML = '<div style="text-align:center; padding:30px; font-weight:bold; color:#666;">لا يوجد متدربين في هذا التصنيف.</div>';
             return;
         }
-    let tableHTML = `
+
+        let tableHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
@@ -629,7 +596,7 @@ function loadPackagesFromLocal() {
                         <th>الرزمة</th>
                         <th>الأرقام المرجعية</th>
                         <th>الساعات</th>
-                        <th>حالة الاكتمال</th>
+                        <th>حالة الخطة (SC04)</th>
                         <th>الجدول الزمني</th>
                     </tr>
                 </thead>
@@ -641,18 +608,17 @@ function loadPackagesFromLocal() {
             let crnsText = st.assignedCRNs && st.assignedCRNs.length > 0 ? 
                 st.assignedCRNs.map(c => `<span class="badge badge-success">${c}</span>`).join(' ') : '-';
                 
-         let strCrns = JSON.stringify(st.assignedCRNs || []);
+            let strCrns = JSON.stringify(st.assignedCRNs || []);
             let scheduleBtn = '-';
+            
             if (st.assignedPackage) {
-                // فحص التعارض قبل رسم الزر
                 let conflictCheck = checkScheduleConflicts(st.assignedCRNs);
                 let btnStyle = conflictCheck.hasOverlap ? "background:#dc3545;" : "background:#008e7e;";
                 let btnText = conflictCheck.hasOverlap ? "⚠️ يوجد تعارض" : "🗓️ عرض الجدول";
-                
                 scheduleBtn = `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="${btnStyle} color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">${btnText}</button>`;
             }
 
-// 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
+            // حساب الساعات
             let totalHours = 0;
             let countedCoursesForHours = new Set();
             
@@ -669,12 +635,8 @@ function loadPackagesFromLocal() {
                     requiredPartsFromSS01[nCode] = { theory: false, practical: false };
                 }
                 let typeStr = String(details.type).toLowerCase();
-                if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
-                    requiredPartsFromSS01[nCode].theory = true;
-                }
-                if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
-                    requiredPartsFromSS01[nCode].practical = true;
-                }
+                if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) requiredPartsFromSS01[nCode].theory = true;
+                if (typeStr.includes('عملي') || typeStr.includes('تدريب')) requiredPartsFromSS01[nCode].practical = true;
             }
 
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
@@ -686,16 +648,13 @@ function loadPackagesFromLocal() {
                         let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
                         let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
                         
-                        // احتساب الساعات بذكاء يحاكي نظام رايات الحقيقي
                         if (!countedCoursesForHours.has(normCourse)) {
                             let hasTheoryInCollege = requiredPartsFromSS01[normCourse] ? requiredPartsFromSS01[normCourse].theory : false;
                             let isTheoryCrn = typeStr.includes('نظري') || typeStr.includes('محاضرة');
                             
-                            // القاعدة: إذا كان المقرر له نظري وعملي، نأخذ الساعات من (الشعبة النظرية) فقط ونتجاهل العملي.
-                            // أما إذا كان المقرر (عملي فقط) لا يوجد له نظري بالكلية، نأخذ ساعاته من الشعبة العملية.
                             if (!hasTheoryInCollege || isTheoryCrn) {
                                 totalHours += hrs;
-                                countedCoursesForHours.add(normCourse); // نمنع تكرار الجمع لنفس المقرر
+                                countedCoursesForHours.add(normCourse); 
                             }
                         }
                     }
@@ -703,7 +662,7 @@ function loadPackagesFromLocal() {
             }
 
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
-            
+
             let planData = null;
             if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
                 let programClean = st.program.trim();
@@ -720,7 +679,6 @@ function loadPackagesFromLocal() {
                 }
             }
 
-            // 2. التحقق من الخطة الديناميكية والمطابقة الذكية للشقين النظري والعملي
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
             let planStatusHtml = `<td>-</td>`;
             
@@ -734,7 +692,6 @@ function loadPackagesFromLocal() {
                 else {
                     if (planData) {
                         let requiredParts = planData.requiredParts; 
-                        
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
@@ -750,8 +707,7 @@ function loadPackagesFromLocal() {
                     }
                 }
             }
-            
-            // 3. بناء سطر الجدول
+
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>
@@ -768,48 +724,32 @@ function loadPackagesFromLocal() {
         container.innerHTML = tableHTML;
     }
 
-    // دالة نسخ البيانات لرايات أوتو
     function copyFilteredToRayat() {
         const selectedProg = document.getElementById('result-program-filter').value;
         let textToCopy = "";
-        
         let targetTrainees = [];
-        if (selectedProg === 'الكل') {
-            targetTrainees = traineesData;
-        } else if (selectedProg === 'غير مسند') {
-            targetTrainees = traineesData.filter(t => t.assignedPackage === null);
-        } else {
-            targetTrainees = traineesData.filter(t => t.program === selectedProg);
-        }
+        
+        if (selectedProg === 'الكل') targetTrainees = traineesData;
+        else if (selectedProg === 'غير مسند') targetTrainees = traineesData.filter(t => t.assignedPackage === null);
+        else targetTrainees = traineesData.filter(t => t.program === selectedProg);
         
         targetTrainees.forEach(st => {
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
-                // دمج رقم المتدرب مع الأرقام المرجعية مفصولة بـ Tab
                 let line = st.id + '\t' + st.assignedCRNs.join('\t');
                 textToCopy += line + '\n';
             }
         });
 
-        if (textToCopy.trim() === "") {
-            showToast('لا توجد بيانات مسندة للنسخ في الجدول المعروض!');
-            return;
-        }
-
-        navigator.clipboard.writeText(textToCopy.trim()).then(() => {
-            showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!');
-        }).catch(err => {
-            console.error('فشل النسخ: ', err);
-            showToast('❌ حدث خطأ أثناء النسخ');
-        });
+        if (textToCopy.trim() === "") { showToast('لا توجد بيانات مسندة للنسخ في الجدول المعروض!'); return; }
+        navigator.clipboard.writeText(textToCopy.trim()).then(() => { showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!'); })
+        .catch(err => { showToast('❌ حدث خطأ أثناء النسخ'); });
     }
 
-    // التبديل بين الصفحات
     function switchPage(pageId) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');
     }
 
-    // عرض التنبيهات المنبثقة
     function showToast(message) {
         let toast = document.getElementById("toast");
         toast.innerText = message;
@@ -817,216 +757,137 @@ function loadPackagesFromLocal() {
         setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
 
-    // خوارزمية اكتشاف التعارض الزمني
-function checkScheduleConflicts(crnsArray) {
-    let daySchedules = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
-    let hasOverlap = false;
+    function checkScheduleConflicts(crnsArray) {
+        let daySchedules = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+        if (!crnsArray) return { hasOverlap: false };
 
-    if (!crnsArray) return { hasOverlap: false };
+        crnsArray.forEach(crn => {
+            let details = globalCRNDetails[crn.trim()];
+            if (details) {
+                details.parts.forEach(part => {
+                    let times = String(part.time).match(/\d+/g);
+                    if (times && times.length >= 2) {
+                        let start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
+                        let end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
 
-    crnsArray.forEach(crn => {
-        let details = globalCRNDetails[crn.trim()];
-        if (details) {
-            details.parts.forEach(part => {
-                let times = String(part.time).match(/\d+/g);
-                if (times && times.length >= 2) {
-                    let start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
-                    let end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
+                        let dayStr = String(part.days).replace(/\s/g, '');
+                        let daysMatched = [];
+                        if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) daysMatched.push('الأحد');
+                        if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) daysMatched.push('الإثنين');
+                        if (dayStr.includes('الثلاثاء')) daysMatched.push('الثلاثاء');
+                        if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) daysMatched.push('الأربعاء');
+                        if (dayStr.includes('الخميس')) daysMatched.push('الخميس');
 
-                    let dayStr = String(part.days).replace(/\s/g, '');
-                    let daysMatched = [];
-                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) daysMatched.push('الأحد');
-                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) daysMatched.push('الإثنين');
-                    if (dayStr.includes('الثلاثاء')) daysMatched.push('الثلاثاء');
-                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) daysMatched.push('الأربعاء');
-                    if (dayStr.includes('الخميس')) daysMatched.push('الخميس');
-
-                    daysMatched.forEach(d => {
-                        daySchedules[d].push({ crn: crn.trim(), start: start, end: end });
-                    });
-                }
-            });
-        }
-    });
-
-    // فحص التداخل (التعارض يحدث إذا كانت أكبر نقطة بداية أصغر من أصغر نقطة نهاية)
-    for (let day in daySchedules) {
-        let classes = daySchedules[day];
-        for (let i = 0; i < classes.length; i++) {
-            for (let j = i + 1; j < classes.length; j++) {
-                if (Math.max(classes[i].start, classes[j].start) < Math.min(classes[i].end, classes[j].end)) {
-                    return { hasOverlap: true };
-                }
+                        daysMatched.forEach(d => { daySchedules[d].push({ crn: crn.trim(), start: start, end: end }); });
+                    }
+                });
             }
-        }
-    }
-    return { hasOverlap: false };
-}
- // فتح نافذة الجدول العرضي مع تلوين التعارضات
-function openScheduleModal(studentName, crnsArray) {
-    if (!crnsArray || crnsArray.length === 0) return;
-    
-    document.getElementById('modal-title').innerText = `الجدول العرضي: ${studentName}`;
-    const content = document.getElementById('modal-content-area');
-    
-    let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
-    let notFoundCRNs = [];
+        });
 
-    crnsArray.forEach(crn => {
-        let details = globalCRNDetails[crn.trim()];
-        if (details) {
-            details.parts.forEach(part => {
-                let dayStr = String(part.days).replace(/\s/g, '');
-                let isMapped = false;
-                
-                let times = String(part.time).match(/\d+/g);
-                let start = 9999, end = 9999;
-                if (times && times.length >= 2) {
-                    start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
-                    end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
-                }
-                
-                let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
-                let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '', start: start, end: end, isConflicting: false };
-
-                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
-                
-                if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
-            });
-        } else {
-            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
-        }
-    });
-
-    let html = `<table class="schedule-h-table"><tbody>`;
-    
-    for (let day in daysMap) {
-        if (daysMap[day].length > 0) {
-            
-            // 1. ترتيب المقررات حسب الوقت
-            daysMap[day].sort((a, b) => a.start - b.start);
-
-            // 2. اكتشاف المقررات المتعارضة وتغيير حالتها في هذا اليوم
-            for (let i = 0; i < daysMap[day].length; i++) {
-                for (let j = 0; j < daysMap[day].length; j++) {
-                    if (i !== j) {
-                        if (Math.max(daysMap[day][i].start, daysMap[day][j].start) < Math.min(daysMap[day][i].end, daysMap[day][j].end)) {
-                            daysMap[day][i].isConflicting = true;
-                        }
+        for (let day in daySchedules) {
+            let classes = daySchedules[day];
+            for (let i = 0; i < classes.length; i++) {
+                for (let j = i + 1; j < classes.length; j++) {
+                    if (Math.max(classes[i].start, classes[j].start) < Math.min(classes[i].end, classes[j].end)) {
+                        return { hasOverlap: true };
                     }
                 }
             }
-
-            html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
-            daysMap[day].forEach(course => {
-                
-                let borderColor = "#8dc63f"; 
-                let bgColor = "#eef7f6"; 
-                
-                if (course.type.includes('نظري')) {
-                    borderColor = "#006d60";
-                    bgColor = "#e5f0ef";
-                } else if (course.type.includes('عملي')) {
-                    borderColor = "#8dc63f";
-                    bgColor = "#f6fcf3";
-                }
-                
-                // 3. التلوين الأحمر التحذيري عند التعارض
-                let warningIcon = '';
-                if (course.isConflicting) {
-                    borderColor = "#dc3545"; // أحمر صارخ
-                    bgColor = "#f8d7da"; // خلفية حمراء باهتة
-                    warningIcon = '⚠️ <span style="color:#dc3545; font-size:11px;">(تعارض زمني)</span><br>';
-                }
-
-                html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
-                            <strong>${warningIcon}${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
-                            <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
-                         </div>`;
-            });
-            html += `</td></tr>`;
         }
+        return { hasOverlap: false };
     }
-    html += `</tbody></table>`;
 
-    if (notFoundCRNs.length > 0) {
-        html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها (أو غير مسجلة بـ SS01):</h4><ul>`;
-        notFoundCRNs.forEach(c => {
-            html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`;
+    function openScheduleModal(studentName, crnsArray) {
+        if (!crnsArray || crnsArray.length === 0) return;
+        document.getElementById('modal-title').innerText = `الجدول العرضي: ${studentName}`;
+        const content = document.getElementById('modal-content-area');
+        
+        let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+        let notFoundCRNs = [];
+
+        crnsArray.forEach(crn => {
+            let details = globalCRNDetails[crn.trim()];
+            if (details) {
+                details.parts.forEach(part => {
+                    let dayStr = String(part.days).replace(/\s/g, '');
+                    let isMapped = false;
+                    let times = String(part.time).match(/\d+/g);
+                    let start = 9999, end = 9999;
+                    if (times && times.length >= 2) {
+                        start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
+                        end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
+                    }
+                    
+                    let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
+                    let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '', start: start, end: end, isConflicting: false };
+
+                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
+                    
+                    if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+                });
+            } else {
+                notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
+            }
         });
-        html += `</ul>`;
-    }
 
-    if(Object.keys(globalCRNDetails).length === 0) {
-        html = `<div style="background:#fff3cd; color:#856404; padding:15px; border-radius:6px; font-weight:bold; text-align:center;">⚠️ لعرض الجدول العرضي، يجب إرفاق تقرير (SS01) في الصفحة الأولى.</div>`;
-    }
+        let html = `<table class="schedule-h-table"><tbody>`;
+        
+        for (let day in daysMap) {
+            if (daysMap[day].length > 0) {
+                daysMap[day].sort((a, b) => a.start - b.start);
 
-    content.innerHTML = html;
-    document.getElementById('schedule-modal').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}    
-    function getStartTime(timeString) {
-        let match = timeString.match(/\d+/);
-        return match ? parseInt(match[0], 10) : 9999;
-    }
-    
-    for (let day in daysMap) {
-        if (daysMap[day].length > 0) {
-            
-            // ترتيب المقررات حسب الوقت
-            daysMap[day].sort((a, b) => getStartTime(a.time) - getStartTime(b.time));
-
-            html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
-            daysMap[day].forEach(course => {
-                
-                // التعديل 2: تحديد لون الخط الجانبي والخلفية بناءً على كلمة (نظري / عملي)
-                let borderColor = "#8dc63f"; // لون افتراضي
-                let bgColor = "#eef7f6"; 
-                
-                if (course.type.includes('نظري')) {
-                    borderColor = "#006d60"; // أخضر غامق جداً للنظري
-                    bgColor = "#e5f0ef"; // خلفية أغمق قليلاً
-                } else if (course.type.includes('عملي')) {
-                    borderColor = "#8dc63f"; // أخضر ليموني فاتح للعملي
-                    bgColor = "#f6fcf3"; // خلفية أفتح وأكثر بياضاً
+                for (let i = 0; i < daysMap[day].length; i++) {
+                    for (let j = 0; j < daysMap[day].length; j++) {
+                        if (i !== j) {
+                            if (Math.max(daysMap[day][i].start, daysMap[day][j].start) < Math.min(daysMap[day][i].end, daysMap[day][j].end)) {
+                                daysMap[day][i].isConflicting = true;
+                            }
+                        }
+                    }
                 }
 
-                html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
-                            <strong>${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
-                            <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
-                         </div>`;
-            });
-            html += `</td></tr>`;
+                html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
+                daysMap[day].forEach(course => {
+                    let borderColor = "#8dc63f"; 
+                    let bgColor = "#eef7f6"; 
+                    if (course.type.includes('نظري')) { borderColor = "#006d60"; bgColor = "#e5f0ef"; } 
+                    else if (course.type.includes('عملي')) { borderColor = "#8dc63f"; bgColor = "#f6fcf3"; }
+                    
+                    let warningIcon = '';
+                    if (course.isConflicting) {
+                        borderColor = "#dc3545"; bgColor = "#f8d7da";
+                        warningIcon = '⚠️ <span style="color:#dc3545; font-size:11px;">(تعارض زمني)</span><br>';
+                    }
+
+                    html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
+                                <strong>${warningIcon}${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
+                                <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
+                             </div>`;
+                });
+                html += `</td></tr>`;
+            }
         }
-    }
-    html += `</tbody></table>`;
+        html += `</tbody></table>`;
 
-    if (notFoundCRNs.length > 0) {
-        html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها (أو غير مسجلة بـ SS01):</h4><ul>`;
-        notFoundCRNs.forEach(c => {
-            html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`;
-        });
-        html += `</ul>`;
-    }
-
-    if(Object.keys(globalCRNDetails).length === 0) {
-        html = `<div style="background:#fff3cd; color:#856404; padding:15px; border-radius:6px; font-weight:bold; text-align:center;">⚠️ لعرض الجدول العرضي، يجب إرفاق تقرير (SS01) في الصفحة الأولى.</div>`;
+        if (notFoundCRNs.length > 0) {
+            html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها:</h4><ul>`;
+            notFoundCRNs.forEach(c => { html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`; });
+            html += `</ul>`;
+        }
+        content.innerHTML = html;
+        document.getElementById('schedule-modal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
     }
 
-    content.innerHTML = html;
-    document.getElementById('schedule-modal').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}
-
-function closeScheduleModal(event) {
-    if (event) event.stopPropagation();
-    document.getElementById('schedule-modal').style.display = 'none';
-    document.body.style.overflow = '';
-}
+    function closeScheduleModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('schedule-modal').style.display = 'none';
+        document.body.style.overflow = '';
+    }
 </script>
 
     <!-- نافذة عرض الجدول العرضي -->

@@ -722,20 +722,30 @@
                     planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">لم يعثر على خطة للمستوى الأول بالملف</span></td>`;
                 }
                 else {
-                    if (planData) {
+                   if (planData) {
                         let requiredParts = planData.requiredParts; 
+                        
+                        // تجهيز المتغيرات للنافذة المنبثقة
+                        let strCrnsEscaped = JSON.stringify(st.assignedCRNs || []).replace(/"/g, '&quot;');
+                        let programEscaped = (st.program || '').replace(/"/g, '&quot;');
+                        let studentNameEscaped = (st.name || '').replace(/"/g, '&quot;');
+
+                        let badgeStyle = "cursor:pointer; display:inline-block; transition: 0.2s; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-bottom: 2px dashed #fff;";
+                        let badgeHover = "onmouseover=\"this.style.transform='scale(1.05)'; this.style.opacity='0.9';\" onmouseout=\"this.style.transform='scale(1)'; this.style.opacity='1';\"";
+                        let clickAction = `onclick="openPlanModal('${studentNameEscaped}', '${programEscaped}', ${strCrnsEscaped})" title="انقر لعرض تفاصيل المقررات"`;
+
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
                         else if (studentPartsCount === requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
                         } else if (studentPartsCount < requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${studentPartsCount} من ${requiredParts} شعبة)</span></td>`;
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${studentPartsCount} من ${requiredParts} شعبة) 👆</span></td>`;
                         }
                     } else {
-                        planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;
+                       planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;
                     }
                 }
             }

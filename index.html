@@ -115,7 +115,7 @@
                     <h3>إعدادات ملف قائمة المستجدين (SP15)</h3>
                     <div class="settings-row">
                         <div><label>عمود رقم المتدرب</label><input type="text" id="col_sp15_id" value="رقم المتدرب"></div>
-                        <div><label>عمود اسم المتدرب</label><input type="text" id="col_sp15_name" value="الاسم"></div>
+                        <div><label>عمود اسم المتدرب</label><input type="text" id="col_sp15_name" value="إسم المتدرب"></div>
                         <div><label>عمود التخصص/البرنامج</label><input type="text" id="col_sp15_program" value="وصف البرنامج"></div>
                     </div>
                 </div>
@@ -124,6 +124,7 @@
                     <div class="settings-row">
                         <div><label>عمود الرقم المرجعي</label><input type="text" id="col_ss01_crn" value="الرقم المرجعي"></div>
                         <div><label>عمود المقرر</label><input type="text" id="col_ss01_course" value="المقرر"></div>
+                        <div><label>عمود الساعات المعتمدة</label><input type="text" id="col_ss01_hours" value="الساعات المعتمدة"></div>
                     </div>
                 </div>
             </div>
@@ -242,7 +243,7 @@
     let globalCRNDetails = {}; // لجدول العرض الأفقي
     
     // الانتقال للصفحة الثانية
-   async function goToPage2() {
+  async function goToPage2() {
     const sp15File = document.getElementById('sp15File').files[0];
     const ss01File = document.getElementById('ss01File').files[0];
     const status = document.getElementById('status-1');
@@ -258,11 +259,12 @@
         const colName = document.getElementById('col_sp15_name').value.trim();
         const colProgram = document.getElementById('col_sp15_program').value.trim();
         
-        // استخراج بيانات SS01 للجدول العرضي
+        // استخراج بيانات SS01 للجدول العرضي وحساب الساعات
         if (ss01File) {
             let rawSS01 = await readExcelFile(ss01File);
             const colCrn = document.getElementById('col_ss01_crn').value.trim();
             const colCourse = document.getElementById('col_ss01_course').value.trim();
+            const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
             
             globalCRNDetails = {};
             rawSS01.forEach(row => {
@@ -272,7 +274,8 @@
                         course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
                         name: row['اسم المقرر'] || '',
                         time: row['الوقت'] || row['Time'] || 'غير محدد',
-                        days: row['اليوم'] || row['Days'] || 'غير محدد'
+                        days: row['اليوم'] || row['Days'] || 'غير محدد',
+                        hours: parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0) // جلب الساعات المعتمدة
                     };
                 }
             });
@@ -284,7 +287,8 @@
         
         rawSP15.forEach(row => {
             let id = row[colId];
-            let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['Name'] || '';
+            // إضافة "إسم المتدرب" بالهمزة لحل مشكلة (غير متوفر)
+            let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
             let prog = row[colProgram];
             if (id) {
                 traineesData.push({ id: String(id).trim(), name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
@@ -293,10 +297,10 @@
         });
 
         uniquePrograms = Array.from(programsSet).sort();
-        if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات.`);
+        if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات المتدربين.`);
 
         generatePackageCards();
-        loadPackagesFromLocal(); // استرجاع المسودة هنا
+        loadPackagesFromLocal();
         switchPage('page-2');
 
     } catch (error) { status.innerText = error.message; } 
@@ -305,6 +309,7 @@
         document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
     }
 }
+    
     // توليد كروت الرزم مع خيار "الكل"
     function generatePackageCards() {
     const numInput = document.getElementById('num-packages');
@@ -415,7 +420,7 @@ function loadPackagesFromLocal() {
                 return;
             }
 
-            let crns = crnsRaw.split(/[\s,،]+/).filter(c => c.trim() !== "");
+            let crns = [...new Set(crnsRaw.split(/[\s,،]+/).filter(c => c.trim() !== ""))];
             
             packagesData.push({
                 id: i,
@@ -516,7 +521,7 @@ function loadPackagesFromLocal() {
             return;
         }
 
-      let tableHTML = `
+    let tableHTML = `
             <table class="data-table">
                 <thead>
                     <tr>
@@ -524,6 +529,7 @@ function loadPackagesFromLocal() {
                         <th>اسم المتدرب</th>
                         <th>الرزمة</th>
                         <th>الأرقام المرجعية</th>
+                        <th>الساعات</th>
                         <th>الجدول الزمني</th>
                     </tr>
                 </thead>
@@ -540,12 +546,24 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
+            // حساب الساعات المعتمدة للمتدرب
+            let totalHours = 0;
+            if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+                st.assignedCRNs.forEach(crn => {
+                    if (globalCRNDetails[crn] && globalCRNDetails[crn].hours) {
+                        totalHours += globalCRNDetails[crn].hours;
+                    }
+                });
+            }
+            let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
+
             tableHTML += `
                 <tr>
                     <td>${st.id}</td>
                     <td>${st.name || 'غير متوفر'}</td>
                     <td>${pkgText}</td>
                     <td>${crnsText}</td>
+                    <td>${hoursBadge}</td>
                     <td>${scheduleBtn}</td>
                 </tr>
             `;

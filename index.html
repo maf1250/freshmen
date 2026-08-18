@@ -114,7 +114,7 @@
             <summary>⚙️ تخصيص أسماء الأعمدة (تعدل فقط عند الحاجة)</summary>
             <div class="settings-content">
                 <div class="inner-group">
-                    <h3>إعدادات ملف قائمة المستجدين وحالة تسجيلهم (SP15)</h3>
+                    <h3>إعدادات تقرير قائمة المستجدين وحالة تسجيلهم (SP15)</h3>
                     <div class="settings-row">
                         <div><label>عمود رقم المتدرب</label><input type="text" id="col_sp15_id" value="رقم المتدرب"></div>
                         <div><label>عمود اسم المتدرب</label><input type="text" id="col_sp15_name" value="إسم المتدرب"></div>
@@ -141,7 +141,7 @@
         </details>
 
         <div class="upload-group">
-            <label>1. ملف قائمة المستجدين وحالة تسجيلهم (SP15)</label>
+            <label>1. تقرير قائمة المستجدين وحالة تسجيلهم (SP15)</label>
             <input type="file" id="sp15File" accept=".csv">
         </div>
 
@@ -261,7 +261,7 @@
     const ss01File = document.getElementById('ss01File').files[0];
     const status = document.getElementById('status-1');
     
-    if (!sp15File) { status.innerText = 'الرجاء إرفاق ملف قائمة المستجدين (SP15)'; return; }
+    if (!sp15File) { status.innerText = 'الرجاء إرفاق تقرير قائمة المستجدين (SP15)'; return; }
 
     document.getElementById('loader-1').style.display = 'inline-block';
     document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
@@ -312,7 +312,7 @@ globalCRNDetails = {};
             });
         }
 
-// معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
+// معالجة تقرير الخطة SC04 وحساب مقررات الفصل الأول بذكاء
         const sc04File = document.getElementById('sc04File').files[0];
         dynamicSC04Plan = {};
         window.globalCourseRequirements = {}; // قاموس عالمي ذكي لمعرفة احتياج كل مقرر (شعبة أو شعبتين)
@@ -648,12 +648,13 @@ function loadPackagesFromLocal() {
 
 // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
-            let studentCoursesMap = {};
+            let countedCoursesForHours = new Set();
             
             const normalizeCode = (code) => {
                 if (!code) return '';
                 return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
             };
+
             let requiredPartsFromSS01 = {};
             for (let crnKey in globalCRNDetails) {
                 let details = globalCRNDetails[crnKey];
@@ -677,37 +678,26 @@ function loadPackagesFromLocal() {
                         let rawCourse = globalCRNDetails[crnClean].course;
                         let normCourse = normalizeCode(rawCourse);
                         let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
+                        let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
                         
-                        if (!studentCoursesMap[normCourse]) {
-                            studentCoursesMap[normCourse] = { count: 0, maxHours: hrs };
-                        } else {
-                            studentCoursesMap[normCourse].maxHours = Math.max(studentCoursesMap[normCourse].maxHours, hrs);
+                        // احتساب الساعات بذكاء يحاكي نظام رايات الحقيقي
+                        if (!countedCoursesForHours.has(normCourse)) {
+                            let hasTheoryInCollege = requiredPartsFromSS01[normCourse] ? requiredPartsFromSS01[normCourse].theory : false;
+                            let isTheoryCrn = typeStr.includes('نظري') || typeStr.includes('محاضرة');
+                            
+                            // القاعدة: إذا كان المقرر له نظري وعملي، نأخذ الساعات من (الشعبة النظرية) فقط ونتجاهل العملي.
+                            // أما إذا كان المقرر (عملي فقط) لا يوجد له نظري بالكلية، نأخذ ساعاته من الشعبة العملية.
+                            if (!hasTheoryInCollege || isTheoryCrn) {
+                                totalHours += hrs;
+                                countedCoursesForHours.add(normCourse); // نمنع تكرار الجمع لنفس المقرر
+                            }
                         }
-                        studentCoursesMap[normCourse].count += 1;
                     }
                 });
             }
 
-            // حساب إجمالي الساعات بالاعتماد على الاستنتاج الذكي
-            for (let normCourse in studentCoursesMap) {
-                let assignedCount = studentCoursesMap[normCourse].count; 
-                let courseHours = studentCoursesMap[normCourse].maxHours; 
-                
-                let requiredCountForCourse = 1; // الافتراضي شعبة واحدة
-                
-                if (requiredPartsFromSS01[normCourse]) {
-                    if (requiredPartsFromSS01[normCourse].theory && requiredPartsFromSS01[normCourse].practical) {
-                        requiredCountForCourse = 2; // إذن يحتاج شعبتين (نظري + عملي)
-                    }
-                }
-                
-                if (assignedCount >= requiredCountForCourse) {
-                    totalHours += courseHours;
-                }
-            }
-
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
-
+            
             let planData = null;
             if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
                 let programClean = st.program.trim();
@@ -852,7 +842,7 @@ function openScheduleModal(studentName, crnsArray) {
                 if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
             });
         } else {
-            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
+            notFoundCRNs.push({ crn: crn.trim(), course: ' غير متوفر بتقرير SS01', time: '-', days: '-' });
         }
     });
 

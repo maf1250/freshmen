@@ -631,6 +631,7 @@ function loadPackagesFromLocal() {
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
 
             // 2. ثانياً: كود التحقق من الخطة الديناميكية (بعد أن تم تجهيز countedCourses)
+          // 2. ثانياً: كود التحقق من الخطة الديناميكية (بعد أن تم تجهيز countedCourses)
             let uniqueCoursesCount = countedCourses.size; 
             let planStatusHtml = `<td>-</td>`;
             
@@ -640,21 +641,41 @@ function loadPackagesFromLocal() {
                 if (Object.keys(dynamicSC04Plan).length === 0) {
                     planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يُرفق SC04</span></td>`;
                 } 
-                else if (dynamicSC04Plan.hasOwnProperty(programClean)) {
-                    let requiredCount = dynamicSC04Plan[programClean]; 
+                else {
+                    // --- المطابقة الذكية للبحث عن التخصص ---
+                    let requiredCount = null;
                     
-                    if (st.assignedPackage === null) {
-                        planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
-                    }
-                    else if (uniqueCoursesCount === requiredCount) {
-                        planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
-                    } else if (uniqueCoursesCount < requiredCount) {
-                        planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                    // أ) البحث بالتطابق التام
+                    if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                        requiredCount = dynamicSC04Plan[programClean];
                     } else {
-                        planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                        // ب) البحث الجزئي (التقريب الذكي)
+                        let planKeys = Object.keys(dynamicSC04Plan);
+                        for (let key of planKeys) {
+                            // إذا كان اسم التخصص بملف الطلاب يحتوي على اسم التخصص بالخطة، أو العكس
+                            if (programClean.includes(key) || key.includes(programClean)) {
+                                requiredCount = dynamicSC04Plan[key];
+                                break; // تم العثور على التطابق، نوقف البحث
+                            }
+                        }
                     }
-                } else {
-                    planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة (${uniqueCoursesCount} مقرر)</span></td>`;
+
+                    // التحقق من النتيجة بعد المطابقة الذكية
+                    if (requiredCount !== null) {
+                        if (st.assignedPackage === null) {
+                            planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
+                        }
+                        else if (uniqueCoursesCount === requiredCount) {
+                            planStatusHtml = `<td><span class="badge badge-success">✅ مكتمل (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                        } else if (uniqueCoursesCount < requiredCount) {
+                            planStatusHtml = `<td><span class="badge badge-danger">⚠️ ناقص (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                        } else {
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404;">⬆️ زائد (${uniqueCoursesCount} من ${requiredCount})</span></td>`;
+                        }
+                    } else {
+                        // إذا لم يعثر على أي تطابق حتى بعد التقريب الذكي
+                        planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة (${uniqueCoursesCount} مقرر)</span></td>`;
+                    }
                 }
             }
             

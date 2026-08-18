@@ -262,17 +262,31 @@
             const colCourse = document.getElementById('col_ss01_course').value.trim();
             const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
             
-            globalCRNDetails = {};
+           globalCRNDetails = {};
             rawSS01.forEach(row => {
-                let crn = row[colCrn];
-                if (crn) {
-                    globalCRNDetails[String(crn).trim()] = {
-                        course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
-                        name: row['اسم المقرر'] || '',
+                let crn = String(row[colCrn]).trim();
+                if (crn && crn !== 'undefined') {
+                    let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
+                    
+                    if (!globalCRNDetails[crn]) {
+                        // إذا كانت هذه أول مرة نقرأ فيها الرقم المرجعي (الشق الأول)
+                        globalCRNDetails[crn] = {
+                            course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
+                            name: row['اسم المقرر'] || '',
+                            hours: currentHours, // نعتمد الساعات الأساسية
+                            parts: [] // مصفوفة لتخزين الأوقات والأيام للشقين (النظري والعملي)
+                        };
+                    } else {
+                        // إذا كان المقرر مسجلاً مسبقاً (هذا هو الشق الثاني/العملي)
+                        // نأخذ القيمة الأكبر للساعات لضمان عدم تدبيل الساعات (وبالتالي ساعات العملي تعتبر 0)
+                        globalCRNDetails[crn].hours = Math.max(globalCRNDetails[crn].hours, currentHours);
+                    }
+                    
+                    // نضيف وقت ويوم هذا الشق إلى المصفوفة
+                    globalCRNDetails[crn].parts.push({
                         time: row['الوقت'] || row['Time'] || 'غير محدد',
-                        days: row['اليوم'] || row['Days'] || 'غير محدد',
-                        hours: parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0) // جلب الساعات المعتمدة
-                    };
+                        days: row['اليوم'] || row['Days'] || 'غير محدد'
+                    });
                 }
             });
         }
@@ -628,20 +642,27 @@ function openScheduleModal(studentName, crnsArray) {
     let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
     let notFoundCRNs = [];
 
-    crnsArray.forEach(crn => {
+  crnsArray.forEach(crn => {
         let details = globalCRNDetails[crn.trim()];
         if (details) {
-            let dayStr = String(details.days).replace(/\s/g, '');
-            let isMapped = false;
-            if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({crn, ...details}); isMapped = true;}
-            if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({crn, ...details}); isMapped = true;}
-            if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({crn, ...details}); isMapped = true;}
-            if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({crn, ...details}); isMapped = true;}
-            if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({crn, ...details}); isMapped = true;}
-            
-            if(!isMapped) notFoundCRNs.push({crn, ...details});
+            // نمر على كل شق من شقوق المقرر (نظري / عملي)
+            details.parts.forEach(part => {
+                let dayStr = String(part.days).replace(/\s/g, '');
+                let isMapped = false;
+                
+                // نجهز بيانات المقرر لليوم المحدد بوقت هذا الشق فقط
+                let courseInstance = { crn: crn.trim(), course: details.course, time: part.time };
+
+                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push(courseInstance); isMapped = true;}
+                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push(courseInstance); isMapped = true;}
+                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push(courseInstance); isMapped = true;}
+                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push(courseInstance); isMapped = true;}
+                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push(courseInstance); isMapped = true;}
+                
+                if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+            });
         } else {
-            notFoundCRNs.push({ crn: crn, course: 'غير متوفر بملف SS01', time: '-', days: '-' });
+            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
         }
     });
 

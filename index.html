@@ -639,23 +639,30 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-          // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
+       // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
             let studentCoursesMap = {};
             
+            // دالة لتوحيد صيغة رمز المقرر (لحل مشكلة المسافات، الشرطات، والأرقام العربية/الإنجليزية بملفات رايات)
+            const normalizeCode = (code) => {
+                if (!code) return '';
+                return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+            };
+
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
                 st.assignedCRNs.forEach(crn => {
                     let crnClean = crn.trim();
                     if (globalCRNDetails[crnClean]) {
-                        let courseCode = globalCRNDetails[crnClean].course;
-                        let hrs = globalCRNDetails[crnClean].hours;
+                        let rawCourse = globalCRNDetails[crnClean].course;
+                        let normCourse = normalizeCode(rawCourse);
+                        let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
                         
-                        if (!studentCoursesMap[courseCode]) {
-                            studentCoursesMap[courseCode] = { count: 0, maxHours: hrs };
+                        if (!studentCoursesMap[normCourse]) {
+                            studentCoursesMap[normCourse] = { count: 0, maxHours: hrs };
                         } else {
-                            studentCoursesMap[courseCode].maxHours = Math.max(studentCoursesMap[courseCode].maxHours, hrs);
+                            studentCoursesMap[normCourse].maxHours = Math.max(studentCoursesMap[normCourse].maxHours, hrs);
                         }
-                        studentCoursesMap[courseCode].count += 1;
+                        studentCoursesMap[normCourse].count += 1;
                     }
                 });
             }
@@ -678,17 +685,25 @@ function loadPackagesFromLocal() {
             }
 
             // حساب إجمالي الساعات بناءً على اكتمال كل مقرر
-            for (let courseCode in studentCoursesMap) {
-                let assignedCount = studentCoursesMap[courseCode].count;
-                let courseHours = studentCoursesMap[courseCode].maxHours;
+            for (let normCourse in studentCoursesMap) {
+                let assignedCount = studentCoursesMap[normCourse].count;
+                let courseHours = studentCoursesMap[normCourse].maxHours;
                 
-                let requiredCount = 1; // الافتراضي شعبة واحدة
-                if (planData && planData.courseDetails && planData.courseDetails[courseCode]) {
-                    requiredCount = planData.courseDetails[courseCode];
+                let requiredCountForCourse = 1; // الافتراضي شعبة واحدة
+                
+                if (planData && planData.courseDetails) {
+                    // البحث عن المقرر في الخطة بصيغته الموحدة
+                    let planCoursesKeys = Object.keys(planData.courseDetails);
+                    for (let planKey of planCoursesKeys) {
+                        if (normalizeCode(planKey) === normCourse) {
+                            requiredCountForCourse = planData.courseDetails[planKey];
+                            break;
+                        }
+                    }
                 }
                 
-                // تضاف ساعات المقرر فقط إذا أتم المتدرب جميع شعبه المطلوبة (مثلاً 2 من 2)
-                if (assignedCount >= requiredCount) {
+                // تضاف الساعات فقط إذا حقق المتدرب عدد الشعب المطلوبة للمقرر (نظري + عملي)
+                if (assignedCount >= requiredCountForCourse) {
                     totalHours += courseHours;
                 }
             }

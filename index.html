@@ -313,9 +313,9 @@ globalCRNDetails = {};
         }
 
 // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
-   // معالجة ملف الخطة SC04 وحساب مقررات الفصل الأول بذكاء
         const sc04File = document.getElementById('sc04File').files[0];
         dynamicSC04Plan = {};
+        window.globalCourseRequirements = {}; // قاموس عالمي ذكي لمعرفة احتياج كل مقرر (شعبة أو شعبتين)
         isSc04Attached = !!sc04File; 
 
         if (isSc04Attached) {
@@ -327,6 +327,11 @@ globalCRNDetails = {};
                 if (!val) return 0;
                 let v = String(val).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
                 return parseFloat(v) || 0;
+            };
+
+            const normalizeCode = (code) => {
+                if (!code) return '';
+                return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
             };
 
             rawSC04.forEach(row => {
@@ -347,10 +352,10 @@ globalCRNDetails = {};
                 if (prog && course && isLevel1) {
                     let cleanProg = prog.trim();
                     let cleanCourse = course.trim();
+                    let normCourse = normalizeCode(cleanCourse); // توحيد الرمز
                     
                     if (!dynamicSC04Plan[cleanProg]) {
-                        // إضافة courseDetails لمعرفة المتطلب لكل مقرر
-                        dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0, courseDetails: {} };
+                        dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
                     }
                     
                     if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
@@ -364,15 +369,17 @@ globalCRNDetails = {};
                         
                         let parts = 1; 
                         if (theory > 0 && practical > 0) {
-                            parts = 2; 
+                            parts = 2; // المقرر يحتاج نظري وعملي
                         }
+                        
                         dynamicSC04Plan[cleanProg].requiredParts += parts;
-                        dynamicSC04Plan[cleanProg].courseDetails[cleanCourse] = parts;
+                        
+                        // حفظ عدد الشعب المطلوبة لهذا المقرر في القاموس العالمي
+                        window.globalCourseRequirements[normCourse] = parts;
                     }
                 }
             });
         }
-
         
         let rawSP15 = await readExcelFile(sp15File);
         traineesData = [];
@@ -639,11 +646,10 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-       // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
+     // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
             let studentCoursesMap = {};
             
-            // دالة لتوحيد صيغة رمز المقرر (لحل مشكلة المسافات، الشرطات، والأرقام العربية/الإنجليزية بملفات رايات)
             const normalizeCode = (code) => {
                 if (!code) return '';
                 return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
@@ -667,49 +673,20 @@ function loadPackagesFromLocal() {
                 });
             }
 
-            // جلب بيانات خطة المتدرب لمعرفة المتطلبات
-            let planData = null;
-            if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
-                let programClean = st.program.trim();
-                if (dynamicSC04Plan.hasOwnProperty(programClean)) {
-                    planData = dynamicSC04Plan[programClean];
-                } else {
-                    let planKeys = Object.keys(dynamicSC04Plan);
-                    for (let key of planKeys) {
-                        if (programClean.includes(key) || key.includes(programClean)) {
-                            planData = dynamicSC04Plan[key];
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // حساب إجمالي الساعات بناءً على اكتمال كل مقرر
+            // حساب إجمالي الساعات بالاعتماد على القاموس العالمي للمقررات
             for (let normCourse in studentCoursesMap) {
-                let assignedCount = studentCoursesMap[normCourse].count;
-                let courseHours = studentCoursesMap[normCourse].maxHours;
+                let assignedCount = studentCoursesMap[normCourse].count; // كم شعبة مسجلة للمتدرب
+                let courseHours = studentCoursesMap[normCourse].maxHours; // الساعات المعتمدة للمقرر
                 
-                let requiredCountForCourse = 1; // الافتراضي شعبة واحدة
+                let requiredCountForCourse = window.globalCourseRequirements ? (window.globalCourseRequirements[normCourse] || 1) : 1;
                 
-                if (planData && planData.courseDetails) {
-                    // البحث عن المقرر في الخطة بصيغته الموحدة
-                    let planCoursesKeys = Object.keys(planData.courseDetails);
-                    for (let planKey of planCoursesKeys) {
-                        if (normalizeCode(planKey) === normCourse) {
-                            requiredCountForCourse = planData.courseDetails[planKey];
-                            break;
-                        }
-                    }
-                }
-                
-                // تضاف الساعات فقط إذا حقق المتدرب عدد الشعب المطلوبة للمقرر (نظري + عملي)
                 if (assignedCount >= requiredCountForCourse) {
                     totalHours += courseHours;
                 }
             }
 
-            let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#999;">-</span>`;
-
+            let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
+            
             // 2. التحقق من الخطة الديناميكية والمطابقة الذكية للشقين النظري والعملي
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
             let planStatusHtml = `<td>-</td>`;

@@ -646,7 +646,7 @@ function loadPackagesFromLocal() {
                 `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="background:#008e7e; color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">🗓️ عرض الجدول</button>` 
                 : '-';
 
-  // 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
+// 1. حساب الساعات المعتمدة بذكاء وحصر المقررات
             let totalHours = 0;
             let studentCoursesMap = {};
             
@@ -654,6 +654,21 @@ function loadPackagesFromLocal() {
                 if (!code) return '';
                 return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
             };
+            let requiredPartsFromSS01 = {};
+            for (let crnKey in globalCRNDetails) {
+                let details = globalCRNDetails[crnKey];
+                let nCode = normalizeCode(details.course);
+                if (!requiredPartsFromSS01[nCode]) {
+                    requiredPartsFromSS01[nCode] = { theory: false, practical: false };
+                }
+                let typeStr = String(details.type).toLowerCase();
+                if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
+                    requiredPartsFromSS01[nCode].theory = true;
+                }
+                if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
+                    requiredPartsFromSS01[nCode].practical = true;
+                }
+            }
 
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
                 st.assignedCRNs.forEach(crn => {
@@ -661,13 +676,11 @@ function loadPackagesFromLocal() {
                     if (globalCRNDetails[crnClean]) {
                         let rawCourse = globalCRNDetails[crnClean].course;
                         let normCourse = normalizeCode(rawCourse);
-                        // نأخذ الساعات المعتمدة من ملف SS01
                         let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
                         
                         if (!studentCoursesMap[normCourse]) {
                             studentCoursesMap[normCourse] = { count: 0, maxHours: hrs };
                         } else {
-                            // نأخذ أعلى قيمة للساعات (لأن رايات تكررها في العملي والنظري)
                             studentCoursesMap[normCourse].maxHours = Math.max(studentCoursesMap[normCourse].maxHours, hrs);
                         }
                         studentCoursesMap[normCourse].count += 1;
@@ -675,15 +688,19 @@ function loadPackagesFromLocal() {
                 });
             }
 
-            // حساب إجمالي الساعات بالاعتماد على القاموس العالمي للمقررات
+            // حساب إجمالي الساعات بالاعتماد على الاستنتاج الذكي
             for (let normCourse in studentCoursesMap) {
-                let assignedCount = studentCoursesMap[normCourse].count; // كم شعبة مسجلة للمتدرب
-                let courseHours = studentCoursesMap[normCourse].maxHours; // الساعات المعتمدة للمقرر
+                let assignedCount = studentCoursesMap[normCourse].count; 
+                let courseHours = studentCoursesMap[normCourse].maxHours; 
                 
-                // نسأل القاموس: كم شعبة يحتاج هذا المقرر؟ (إذا لم يوجد نفترض 1)
-                let requiredCountForCourse = window.globalCourseRequirements ? (window.globalCourseRequirements[normCourse] || 1) : 1;
+                let requiredCountForCourse = 1; // الافتراضي شعبة واحدة
                 
-                // الصرامة هنا: إذا كانت الشعب المسجلة أقل من المطلوبة (مثلاً 1 من 2) لن تضاف الساعات!
+                if (requiredPartsFromSS01[normCourse]) {
+                    if (requiredPartsFromSS01[normCourse].theory && requiredPartsFromSS01[normCourse].practical) {
+                        requiredCountForCourse = 2; // إذن يحتاج شعبتين (نظري + عملي)
+                    }
+                }
+                
                 if (assignedCount >= requiredCountForCourse) {
                     totalHours += courseHours;
                 }
@@ -691,7 +708,6 @@ function loadPackagesFromLocal() {
 
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
 
-            // --- استرجاع المتغير planData الذي كان مفقوداً لمعرفة حالة الخطة ---
             let planData = null;
             if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
                 let programClean = st.program.trim();

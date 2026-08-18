@@ -89,36 +89,34 @@
          .visitor-counter { margin-top: 30px; padding-top: 15px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 10px; }
 
         /* ستايل زر الصعود للأعلى */
-        #scrollTopBtn {
+        #scrollToTopBtn {
             position: fixed;
             bottom: 30px;
-            right: 30px;
-            background-color: #008e7e;
+            left: 30px; 
+            width: 48px;
+            height: 48px;
+            background-color: #008e7e; 
             color: white;
             border: none;
             border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            font-size: 22px;
             cursor: pointer;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-            opacity: 0;
-            visibility: hidden;
-            transition: all 0.3s ease;
-            z-index: 9999;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.2);
             display: flex;
             justify-content: center;
             align-items: center;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(20px);
+            transition: all 0.3s ease;
+            z-index: 9999;
         }
-        #scrollTopBtn:hover {
-            background-color: #006d60;
-            transform: translateY(-5px);
-            box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+        #scrollToTopBtn:hover {
+            background-color: #006d60; 
+            transform: scale(1.1) translateY(0);
         }
-        #scrollTopBtn.show {
-            opacity: 1;
-            visibility: visible;
-        }
+        #scrollToTopBtn svg { width: 24px; height: 24px; }
+        #scrollToTopBtn.show { opacity: 1; visibility: visible; transform: translateY(0); }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         /* ستايل النافذة المنبثقة للجدول العرضي */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 100000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
@@ -949,7 +947,7 @@
         });
     }
 
-    // فتح نافذة تفاصيل الخطة
+ // فتح نافذة تفاصيل الخطة
     function openPlanModal(studentName, program, crnsArray) {
         document.getElementById('plan-modal-title').innerText = `حالة المقررات: ${studentName}`;
         const content = document.getElementById('plan-modal-content-area');
@@ -976,27 +974,57 @@
             return;
         }
 
+        // توحيد النصوص بصرامة شاملة الحروف العربية (أ، إ، ة، ي) لضمان التطابق
         const normalizeCode = (code) => {
             if (!code) return '';
-            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+            return String(code)
+                .replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+                .replace(/[\s\-_\.]/g, '')
+                .replace(/[أإآ]/g, 'ا')
+                .replace(/ة/g, 'ه')
+                .replace(/ى/g, 'ي')
+                .toLowerCase();
         };
 
-        // تجميع شعب المتدرب لفحصها
-        let studentCoursesMap = {};
+        let planCoursesList = Array.from(planData.courses);
+        let assignedStatus = {};
+        planCoursesList.forEach(pc => {
+            assignedStatus[pc] = { partsCount: 0, crns: [], types: [] };
+        });
+
+        let unmappedCRNs = []; // لجمع الشعب التي لا تخص الخطة (الميزة الجديدة)
+
         if (crnsArray && crnsArray.length > 0) {
             crnsArray.forEach(crn => {
-                let crnClean = crn.trim();
+                let crnClean = String(crn).trim();
                 if (globalCRNDetails[crnClean]) {
                     let rawCourse = globalCRNDetails[crnClean].course;
-                    let normCourse = normalizeCode(rawCourse);
+                    let rawName = globalCRNDetails[crnClean].name;
                     let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
                     
-                    if (!studentCoursesMap[normCourse]) {
-                        studentCoursesMap[normCourse] = { partsCount: 0, crns: [], types: [] };
+                    // ندمج رمز المقرر واسمه للبحث الشامل
+                    let crnSearchText = normalizeCode(rawCourse + rawName);
+
+                    let matchedPlanCourse = null;
+
+                    // البحث عن المقرر في خطة المستوى الأول
+                    for (let planCourse of planCoursesList) {
+                        let normPlanCourse = normalizeCode(planCourse);
+                        // إذا كان رمز الخطة جزءاً من بيانات الشعبة في SS01 أو العكس
+                        if (crnSearchText.includes(normPlanCourse) || normPlanCourse.includes(normalizeCode(rawCourse))) {
+                            matchedPlanCourse = planCourse;
+                            break;
+                        }
                     }
-                    studentCoursesMap[normCourse].partsCount++;
-                    studentCoursesMap[normCourse].crns.push(crnClean);
-                    studentCoursesMap[normCourse].types.push(typeStr);
+
+                    if (matchedPlanCourse) {
+                        assignedStatus[matchedPlanCourse].partsCount++;
+                        assignedStatus[matchedPlanCourse].crns.push(crnClean);
+                        assignedStatus[matchedPlanCourse].types.push(typeStr);
+                    } else {
+                        // الشعبة المسندة غير موجودة في خطة المستوى الأول!
+                        unmappedCRNs.push({ crn: crnClean, name: (rawCourse + ' ' + rawName).trim() });
+                    }
                 }
             });
         }
@@ -1012,38 +1040,23 @@
                         </thead>
                         <tbody>`;
 
-        let planCourses = Array.from(planData.courses);
-        
-        planCourses.forEach(planCourse => {
+        planCoursesList.forEach(planCourse => {
             let normPlanCourse = normalizeCode(planCourse);
-            let requiredParts = window.globalCourseRequirements[normPlanCourse] || 1;
-            
-            let assignedPartsCount = 0;
-            let assignedCRNs = [];
-            let assignedTypes = [];
-
-            // مطابقة ذكية
-            for (let studentNormCourse in studentCoursesMap) {
-                if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
-                    assignedPartsCount = studentCoursesMap[studentNormCourse].partsCount;
-                    assignedCRNs = studentCoursesMap[studentNormCourse].crns;
-                    assignedTypes = studentCoursesMap[studentNormCourse].types;
-                    break;
-                }
-            }
+            let requiredParts = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+            let stat = assignedStatus[planCourse];
 
             let statusBadge = '';
-            if (assignedPartsCount === 0) {
+            if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
-            } else if (assignedPartsCount >= requiredParts) {
-                statusBadge = `<span class="badge badge-success">✅ مكتمل (${assignedCRNs.join(' - ')})</span>`;
+            } else if (stat.partsCount >= requiredParts) {
+                statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>`;
             } else {
                 let typeMsg = "";
                 if (requiredParts === 2) {
-                    let hasTheory = assignedTypes.some(t => t.includes('نظري') || t.includes('محاضرة'));
-                    let hasPrac = assignedTypes.some(t => t.includes('عملي') || t.includes('تدريب'));
-                    if (hasTheory && !hasPrac) typeMsg = " (ينقص الشق العملي)";
-                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص الشق النظري)";
+                    let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة'));
+                    let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                    if (hasTheory && !hasPrac) typeMsg = " (ينقص العملي)";
+                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص النظري)";
                 }
                 statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>`;
             }
@@ -1051,12 +1064,25 @@
             html += `<tr>
                         <td><strong>${planCourse}</strong></td>
                         <td>${requiredParts}</td>
-                        <td>${assignedPartsCount}</td>
+                        <td>${stat.partsCount}</td>
                         <td>${statusBadge}</td>
                      </tr>`;
         });
 
         html += `</tbody></table>`;
+
+        // إظهار الشعب الغريبة (خارج الخطة) في تحذير أصفر
+        if (unmappedCRNs.length > 0) {
+            html += `<div style="margin-top:15px; padding:12px; background:#fff3cd; border:1px solid #ffeeba; border-radius:6px; text-align:right;">
+                        <strong style="color:#856404; font-size:14px;">⚠️ تنبيه إداري هام:</strong><br>
+                        <span style="color:#856404; font-size:13px;">تم إسناد أرقام مرجعية لهذا المتدرب بالخطأ لا تتبع لخطة المستوى الأول، وهي:</span>
+                        <ul style="color:#856404; margin-top:5px; margin-bottom:0; font-size:13px; font-weight:bold;">`;
+            unmappedCRNs.forEach(u => {
+                html += `<li>[${u.crn}] : ${u.name}</li>`;
+            });
+            html += `</ul></div>`;
+        }
+
         content.innerHTML = html;
         document.getElementById('plan-modal').style.display = 'flex';
         document.body.style.overflow = 'hidden';
@@ -1077,7 +1103,12 @@
         <div id="modal-content-area"></div>
     </div>
 </div>
-        <button id="scrollTopBtn" onclick="scrollToTop()" title="العودة للأعلى">⬆️</button>
+     <button id="scrollTopBtn" onclick="scrollToTop()" title="العودة للأعلى">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="18 15 12 9 6 15"></polyline>
+        </svg>
+    </button>
+    
     <!-- نافذة تفاصيل الخطة -->
     <div id="plan-modal" class="modal-overlay" onclick="closePlanModal(event)">
         <div class="modal-box" onclick="event.stopPropagation()">

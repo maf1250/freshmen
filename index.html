@@ -646,9 +646,9 @@ function savePhysicsSetting() {
 
     function setupPage3() {
         const filterSelect = document.getElementById('result-program-filter');
-        filterSelect.innerHTML = `<option value="الكل" selected>الكل (جميع المتدربين)</option>`;
+        filterSelect.innerHTML = `<option value="الكل" selected>الكل</option>`;
         uniquePrograms.forEach(prog => { filterSelect.innerHTML += `<option value="${prog}">${prog}</option>`; });
-        filterSelect.innerHTML += `<option value="غير مسند">المتدربون غير المسند لهم (السعة ممتلئة)</option>`;
+        filterSelect.innerHTML += `<option value="غير مسند">غير المسند لهم</option>`;
         renderResultsTable();
     }
 

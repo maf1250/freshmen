@@ -198,7 +198,13 @@
     <!-- ==================== الصفحة الثانية: إعداد الرزم ==================== -->
     <div id="page-2" class="page">
         <h2 class="page-title">إعداد وتخصيص الرزم التدريبية</h2>
-        
+        <!-- خيار استثناء الفيزياء -->
+        <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">
+                <input type="checkbox" id="exclude-physics-practical" style="width: 18px; height: 18px; cursor: pointer;" onchange="savePhysicsSetting()">
+                استثناء مقرر الفيزياء (فيزي-101) من الشق العملي (واحتسابه كشعبة نظرية فقط)
+            </label>
+        </div>
         <div class="packages-header">
             <div>
                 <strong>حدد عدد الرزم المطلوب إنشاؤها:</strong>
@@ -392,9 +398,15 @@
                             let theory = parseNumber(theoryRaw);
                             let practical = parseNumber(practicalRaw);
                             
+
                             let parts = 1; 
                             if (theory > 0 && practical > 0) {
                                 parts = 2; 
+                            }
+                            
+                            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+                            if (excludePhysics && (normCourse.includes('فيزي') || normCourse.includes('فيزياء') || normCourse.includes('phys'))) {
+                                parts = 1; // إجبار النظام على اعتباره شعبة واحدة
                             }
                             
                             dynamicSC04Plan[cleanProg].requiredParts += parts;
@@ -501,10 +513,21 @@
         localStorage.setItem('savedPackages', JSON.stringify(pkgs));
     }
 
+function savePhysicsSetting() {
+        let isChecked = document.getElementById('exclude-physics-practical').checked;
+        localStorage.setItem('excludePhysics', isChecked);
+    }
+
     function loadPackagesFromLocal() {
         let savedNum = localStorage.getItem('numPackages');
         let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
+        let savedPhysics = localStorage.getItem('excludePhysics');
         
+        if (savedPhysics !== null) {
+            let el = document.getElementById('exclude-physics-practical');
+            if(el) el.checked = (savedPhysics === 'true');
+        }
+
         if (savedNum && savedPkgs) {
             document.getElementById('num-packages').value = savedNum;
             generatePackageCards(); 
@@ -1043,8 +1066,13 @@
         planCoursesList.forEach(planCourse => {
             let normPlanCourse = normalizeCode(planCourse);
             let requiredParts = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+            
+            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
+                requiredParts = 1; // إجبار النافذة المنبثقة وحساب الساعات على اعتباره شعبة واحدة
+            }
+            
             let stat = assignedStatus[planCourse];
-
             let statusBadge = '';
             if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;

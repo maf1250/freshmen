@@ -501,8 +501,8 @@
                 <div class="form-group">
                     <label>التخصص المستهدف:</label>
                     <select id="pkg-program-${i}" onchange="savePackagesToLocal()">
-                        <option value="الكل">الكل (جميع التخصصات)</option>
-                        <optgroup label="تخصصات محددة">${programOptions}</optgroup>
+                        <option value="" disabled selected>-- اختر التخصص --</option>
+                        ${programOptions}
                     </select>
                 </div>
                 <div class="form-group">
@@ -587,8 +587,10 @@ function savePhysicsSetting() {
             let cap = parseInt(document.getElementById(`pkg-capacity-${i}`).value) || 0;
             let crnsRaw = document.getElementById(`pkg-crns-${i}`).value;
             
-            if (!prog || !crnsRaw) {
-                status.innerText = `الرجاء استكمال بيانات الرزمة رقم ${i} (الأرقام المرجعية).`;
+            if (!prog || prog === "" || !crnsRaw) {
+                status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (تحديد التخصص والأرقام المرجعية).`;
+                document.getElementById('loader-2').style.display = 'none';
+                document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
                 return;
             }
 
@@ -618,7 +620,7 @@ function savePhysicsSetting() {
         });
 
         traineesData.forEach(trainee => {
-            let availablePkgs = packagesData.filter(p => p.program === trainee.program || p.program === 'الكل');
+            let availablePkgs = packagesData.filter(p => p.program === trainee.program);
             for (let pkg of availablePkgs) {
                 if (pkg.currentCount < pkg.maxCapacity) {
                     pkg.currentCount++;

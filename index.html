@@ -581,6 +581,12 @@
         return 'orange'; // موجود في الجدول لكنه لم يتطابق مع المستوى الأول لهذا التخصص
     }
     
+       function removeCRNTag(element, pkgId) {
+        element.parentElement.remove();
+        updateHiddenCRNs(pkgId);
+        savePackagesToLocal();
+    }
+
     function addCRNTag(crn, pkgId, skipUpdate = false) {
         let crnStr = String(crn).trim();
         if (!crnStr) return;
@@ -589,31 +595,34 @@
         // منع التكرار داخل نفس الرزمة
         let existingTags = container.querySelectorAll('.crn-tag-text');
         for(let i=0; i < existingTags.length; i++) {
-            if(existingTags[i].innerText === crnStr) return; 
+            // استخدام textContent لضمان سحب الرقم فقط
+            if(existingTags[i].textContent === crnStr) return; 
         }
 
         let prog = document.getElementById(`pkg-program-${pkgId}`).value;
         let colorClass = determineCRNColor(crnStr, prog);
         
+        // جلب رمز المقرر من تفاصيل الشعب لعرضه (فقط إذا كان موجوداً - أي أخضر أو برتقالي)
+        let courseCodeHtml = "";
+        if (globalCRNDetails[crnStr] && globalCRNDetails[crnStr].course) {
+            courseCodeHtml = `<span style="font-size: 11px; background: rgba(255,255,255,0.25); padding: 2px 6px; border-radius: 8px; font-weight: normal; letter-spacing: 0.5px;">${globalCRNDetails[crnStr].course}</span>`;
+        }
+
         let tag = document.createElement('div');
         tag.className = `crn-tag ${colorClass}`;
-        tag.innerHTML = `<span class="crn-tag-text">${crnStr}</span> <span class="remove" onclick="removeCRNTag(this, ${pkgId})" title="حذف">✖</span>`;
+        // تم فصل الرقم عن رمز المقرر لكي لا يختل نظام الحفظ
+        tag.innerHTML = `<span class="crn-tag-text">${crnStr}</span> ${courseCodeHtml} <span class="remove" onclick="removeCRNTag(this, ${pkgId})" title="حذف">✖</span>`;
         
         container.appendChild(tag);
         
         if (!skipUpdate) updateHiddenCRNs(pkgId);
     }
 
-    function removeCRNTag(element, pkgId) {
-        element.parentElement.remove();
-        updateHiddenCRNs(pkgId);
-        savePackagesToLocal();
-    }
-
     function updateHiddenCRNs(pkgId) {
         let container = document.getElementById(`pkg-crns-tags-${pkgId}`);
         let tags = container.querySelectorAll('.crn-tag-text');
-        let crnArray = Array.from(tags).map(t => t.innerText);
+        // استخدام textContent بدلاً من innerText حتى لا يندمج رقم المقرر مع CRN
+        let crnArray = Array.from(tags).map(t => t.textContent);
         document.getElementById(`pkg-crns-${pkgId}`).value = crnArray.join(' ');
     }
 
@@ -623,7 +632,8 @@
         let tags = container.querySelectorAll('.crn-tag');
         
         tags.forEach(tag => {
-            let crn = tag.querySelector('.crn-tag-text').innerText;
+            // استخدام textContent بدلاً من innerText
+            let crn = tag.querySelector('.crn-tag-text').textContent;
             let newColor = determineCRNColor(crn, prog);
             tag.className = `crn-tag ${newColor}`;
         });
@@ -666,7 +676,7 @@
                     <input type="number" id="pkg-capacity-${i}" min="1" value="20" onchange="savePackagesToLocal()">
                 </div>
                 <div class="form-group">
-                    <label>الأرقام المرجعية (CRNs):</label>
+                    <label>الأرقام المرجعية:</label>
                     <!-- حقل مخفي لحفظ القيم كالسابق للبرمجة -->
                     <input type="hidden" id="pkg-crns-${i}" onchange="savePackagesToLocal()">
                     <!-- الحقل الظاهر للمستخدم للطباعة -->

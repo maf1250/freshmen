@@ -146,7 +146,17 @@
 .course-badge { display: inline-block; background: #eef7f6; border-right: 4px solid #8dc63f; padding: 8px 12px; margin: 4px; border-radius: 4px; font-size: 13px; text-align: right; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
 .course-badge strong { color: #008e7e; display: block; font-size: 14px; margin-bottom: 5px; border-bottom: 1px dashed #b2d8d3; padding-bottom: 3px;}
 .course-badge .time { color: #555; font-size: 12px; font-weight: bold; }
-        
+
+        /* ستايل نظام إدخال الأرقام المرجعية  */
+.crn-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 34px;}
+.crn-tag { padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s;}
+.crn-tag:hover { transform: scale(1.05); }
+.crn-tag.green { background-color: #008e7e; } /* مستوى أول */
+.crn-tag.orange { background-color: #f39c12; } /* موجود بـ SS01 لكن مستوى أعلى */
+.crn-tag.red { background-color: #dc3545; } /* غير موجود نهائياً */
+.crn-tag span.remove { cursor: pointer; font-weight: bold; padding: 0 4px; background: rgba(0,0,0,0.1); border-radius: 50%; }
+.crn-tag span.remove:hover { background: rgba(0,0,0,0.3); color: #fff; }
+.crn-legend { display: flex; gap: 15px; justify-content: center; background: #fff; padding: 10px; border-radius: 8px; border: 1px dashed #cbe6e3; margin-bottom: 20px; font-size: 13px; font-weight: bold; flex-wrap: wrap;}
     </style>
 </head>
 <body>
@@ -225,9 +235,15 @@
         <!-- خيار استثناء الفيزياء -->
         <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">
-                <input type="checkbox" id="exclude-physics-practical" style="width: 18px; height: 18px; cursor: pointer;" onchange="savePhysicsSetting()">
+                <input type="checkbox" id="exclude-physics-practical" checked style="width: 18px; height: 18px; cursor: pointer;" onchange="savePhysicsSetting()">
                 استثناء مقرر الفيزياء (فيزي-101) من الشق العملي واحتسابه كشعبة نظرية فقط
             </label>
+        </div>
+        <!-- دليل الألوان -->
+        <div class="crn-legend">
+            <span>🟢 مقرر في المستوى الأول</span>
+            <span>🟠 مقرر في مستوى أعلى</span>
+            <span>🔴 غير موجود بجدول الوحدة</span>
         </div>
         <div class="packages-header">
             <div>
@@ -474,6 +490,106 @@
         }
     }
     
+   // دالة عامة لتوحيد النصوص لتسهيل المقارنة في كل مكان
+    function globalNormalizeCode(code) {
+        if (!code) return '';
+        return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+            .replace(/[\s\-_\.]/g, '')
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/ى/g, 'ي')
+            .toLowerCase();
+    }
+
+    // دوال نظام إدخال الرزم التفاعلي (Tags)
+    function handleCRNInput(event, pkgId) {
+        if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
+            event.preventDefault(); // منع تحديث الصفحة أو النزول للأسفل
+            let inputEl = document.getElementById(`pkg-crns-input-${pkgId}`);
+            let crns = inputEl.value.split(/[\s,،]+/).filter(c => c.trim() !== "");
+            
+            crns.forEach(crn => {
+                addCRNTag(crn, pkgId);
+            });
+            
+            inputEl.value = '';
+            updateHiddenCRNs(pkgId);
+            savePackagesToLocal();
+        }
+    }
+
+    function determineCRNColor(crn, prog) {
+        let cleanCrn = String(crn).trim();
+        if (!globalCRNDetails[cleanCrn]) {
+            return 'red'; // غير موجود في SS01
+        }
+        
+        let rawCourse = globalCRNDetails[cleanCrn].course;
+        let rawName = globalCRNDetails[cleanCrn].name || '';
+        let normCourse = globalNormalizeCode(rawCourse + rawName);
+        
+        // التحقق من وجوده في خطة المستوى الأول للتخصص المختار
+        if (prog && dynamicSC04Plan[prog]) {
+            let planCourses = Array.from(dynamicSC04Plan[prog].courses);
+            let isLevel1 = planCourses.some(planCourse => {
+                let normPlan = globalNormalizeCode(planCourse);
+                return normCourse.includes(normPlan) || normPlan.includes(globalNormalizeCode(rawCourse));
+            });
+            if (isLevel1) return 'green'; // مستوى أول
+        }
+        
+        return 'orange'; // موجود في SS01 لكنه خارج خطة المستوى الأول لهذا التخصص
+    }
+
+    function addCRNTag(crn, pkgId, skipUpdate = false) {
+        let crnStr = String(crn).trim();
+        if (!crnStr) return;
+        
+        let container = document.getElementById(`pkg-crns-tags-${pkgId}`);
+        // منع التكرار داخل نفس الرزمة
+        let existingTags = container.querySelectorAll('.crn-tag-text');
+        for(let i=0; i < existingTags.length; i++) {
+            if(existingTags[i].innerText === crnStr) return; 
+        }
+
+        let prog = document.getElementById(`pkg-program-${pkgId}`).value;
+        let colorClass = determineCRNColor(crnStr, prog);
+        
+        let tag = document.createElement('div');
+        tag.className = `crn-tag ${colorClass}`;
+        tag.innerHTML = `<span class="crn-tag-text">${crnStr}</span> <span class="remove" onclick="removeCRNTag(this, ${pkgId})" title="حذف">✖</span>`;
+        
+        container.appendChild(tag);
+        
+        if (!skipUpdate) updateHiddenCRNs(pkgId);
+    }
+
+    function removeCRNTag(element, pkgId) {
+        element.parentElement.remove();
+        updateHiddenCRNs(pkgId);
+        savePackagesToLocal();
+    }
+
+    function updateHiddenCRNs(pkgId) {
+        let container = document.getElementById(`pkg-crns-tags-${pkgId}`);
+        let tags = container.querySelectorAll('.crn-tag-text');
+        let crnArray = Array.from(tags).map(t => t.innerText);
+        document.getElementById(`pkg-crns-${pkgId}`).value = crnArray.join(' ');
+    }
+
+    function revalidatePackageTags(pkgId) {
+        let prog = document.getElementById(`pkg-program-${pkgId}`).value;
+        let container = document.getElementById(`pkg-crns-tags-${pkgId}`);
+        let tags = container.querySelectorAll('.crn-tag');
+        
+        tags.forEach(tag => {
+            let crn = tag.querySelector('.crn-tag-text').innerText;
+            let newColor = determineCRNColor(crn, prog);
+            tag.className = `crn-tag ${newColor}`;
+        });
+        savePackagesToLocal();
+    }
+
     // توليد كروت الرزم 
     function generatePackageCards() {
         const numInput = document.getElementById('num-packages');
@@ -500,7 +616,7 @@
                 <h3>رزمة رقم ${i}</h3>
                 <div class="form-group">
                     <label>التخصص المستهدف:</label>
-                    <select id="pkg-program-${i}" onchange="savePackagesToLocal()">
+                    <select id="pkg-program-${i}" onchange="revalidatePackageTags(${i})">
                         <option value="" disabled selected>-- اختر التخصص --</option>
                         ${programOptions}
                     </select>
@@ -511,16 +627,31 @@
                 </div>
                 <div class="form-group">
                     <label>الأرقام المرجعية (CRNs):</label>
-                    <input type="text" id="pkg-crns-${i}" placeholder="مثال: 12345 12346" onchange="savePackagesToLocal()">
+                    <!-- حقل مخفي لحفظ القيم كالسابق للبرمجة -->
+                    <input type="hidden" id="pkg-crns-${i}" onchange="savePackagesToLocal()">
+                    <!-- الحقل الظاهر للمستخدم للطباعة -->
+                    <input type="text" id="pkg-crns-input-${i}" placeholder="اكتب الرقم المرجعي ثم اضغط Enter أو مسافة" onkeydown="handleCRNInput(event, ${i})">
+                    <!-- حاوية إدراج الوسوم البيضاوية -->
+                    <div id="pkg-crns-tags-${i}" class="crn-tags-container"></div>
                 </div>
             `;
             container.appendChild(card);
 
             if (tempSavedData[i]) {
                 setTimeout(() => {
-                    document.getElementById(`pkg-program-${i}`).value = tempSavedData[i].prog;
-                    document.getElementById(`pkg-capacity-${i}`).value = tempSavedData[i].cap;
-                    document.getElementById(`pkg-crns-${i}`).value = tempSavedData[i].crns;
+                    let progEl = document.getElementById(`pkg-program-${i}`);
+                    if (progEl) progEl.value = tempSavedData[i].prog;
+                    
+                    let capEl = document.getElementById(`pkg-capacity-${i}`);
+                    if (capEl) capEl.value = tempSavedData[i].cap;
+                    
+                    let crnsHiddenEl = document.getElementById(`pkg-crns-${i}`);
+                    if (crnsHiddenEl) {
+                        crnsHiddenEl.value = tempSavedData[i].crns;
+                        // رسم الوسوم بناءً على الداتا السابقة
+                        let crnsArray = tempSavedData[i].crns.split(/[\s,،]+/).filter(c => c.trim() !== "");
+                        crnsArray.forEach(c => addCRNTag(c, i, true));
+                    }
                 }, 0);
             }
         }
@@ -548,7 +679,7 @@ function savePhysicsSetting() {
         localStorage.setItem('excludePhysics', isChecked);
     }
 
-    function loadPackagesFromLocal() {
+   function loadPackagesFromLocal() {
         let savedNum = localStorage.getItem('numPackages');
         let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
         let savedPhysics = localStorage.getItem('excludePhysics');
@@ -566,11 +697,17 @@ function savePhysicsSetting() {
                 savedPkgs.forEach(pkg => {
                     let progEl = document.getElementById(`pkg-program-${pkg.id}`);
                     let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
-                    let crnsEl = document.getElementById(`pkg-crns-${pkg.id}`);
+                    let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
                     
                     if (progEl) progEl.value = pkg.prog;
                     if (capEl) capEl.value = pkg.cap;
-                    if (crnsEl) crnsEl.value = pkg.crns;
+                    if (crnsHiddenEl) {
+                        crnsHiddenEl.value = pkg.crns;
+                        let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
+                        if(container) container.innerHTML = ''; // مسح القديم
+                        let crnsArray = pkg.crns.split(/[\s,،]+/).filter(c => c.trim() !== "");
+                        crnsArray.forEach(c => addCRNTag(c, pkg.id, true)); // إعادة رسم الوسوم
+                    }
                 });
             }, 50);
         }

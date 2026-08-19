@@ -910,9 +910,18 @@ function savePhysicsSetting() {
             
             if (st.assignedPackage) {
                 let conflictCheck = checkScheduleConflicts(st.assignedCRNs);
-                let btnStyle = conflictCheck.hasOverlap ? "background:#dc3545;" : "background:#008e7e;";
-                let btnText = conflictCheck.hasOverlap ? "⚠️ يوجد تعارض" : "🗓️ عرض الجدول";
-                scheduleBtn = `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="${btnStyle} color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold;">${btnText}</button>`;
+                let btnStyle = "background:#008e7e;";
+                let btnText = "🗓️ عرض الجدول";
+
+                if (conflictCheck.hasOverlap) {
+                    btnStyle = "background:#dc3545;"; // أحمر للتعارض
+                    btnText = "🚫 يوجد تعارض";
+                } else if (conflictCheck.hasIntersection) {
+                    btnStyle = "background:#f39c12;"; // برتقالي للتقاطع
+                    btnText = "⚠️ يوجد تقاطع";
+                }
+
+                scheduleBtn = `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="${btnStyle} color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold; transition: 0.3s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${btnText}</button>`;
             }
 
             // حساب الساعات
@@ -1135,19 +1144,17 @@ function savePhysicsSetting() {
         setTimeout(() => { toast.className = toast.className.replace("show", ""); }, 3000);
     }
 
-    function checkScheduleConflicts(crnsArray) {
+   function checkScheduleConflicts(crnsArray) {
         let daySchedules = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
-        if (!crnsArray) return { hasOverlap: false };
+        if (!crnsArray) return { hasOverlap: false, hasIntersection: false };
 
         crnsArray.forEach(crn => {
             let details = globalCRNDetails[crn.trim()];
             if (details) {
                 details.parts.forEach(part => {
-                    let times = String(part.time).match(/\d+/g);
-                    if (times && times.length >= 2) {
-                        let start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
-                        let end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
-
+                    // استخدام دالة تحويل الوقت الدقيقة التي أضفناها مسبقاً
+                    let timeData = parseTimeToMinutes(part.time);
+                    if (timeData) {
                         let dayStr = String(part.days).replace(/\s/g, '');
                         let daysMatched = [];
                         if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) daysMatched.push('الأحد');
@@ -1156,23 +1163,31 @@ function savePhysicsSetting() {
                         if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) daysMatched.push('الأربعاء');
                         if (dayStr.includes('الخميس')) daysMatched.push('الخميس');
 
-                        daysMatched.forEach(d => { daySchedules[d].push({ crn: crn.trim(), start: start, end: end }); });
+                        daysMatched.forEach(d => { daySchedules[d].push({ crn: crn.trim(), start: timeData.start, end: timeData.end }); });
                     }
                 });
             }
         });
 
+        let hasOverlap = false;
+        let hasIntersection = false;
+
         for (let day in daySchedules) {
             let classes = daySchedules[day];
-            for (let i = 0; i < classes.length; i++) {
+            // ترتيب المحاضرات زمنياً لتسهيل الفحص
+            classes.sort((a, b) => a.start - b.start);
+            
+            for (let i = 0; i < classes.length - 1; i++) {
                 for (let j = i + 1; j < classes.length; j++) {
-                    if (Math.max(classes[i].start, classes[j].start) < Math.min(classes[i].end, classes[j].end)) {
-                        return { hasOverlap: true };
+                    if (classes[i].end > classes[j].start) {
+                        hasOverlap = true;
+                    } else if (classes[i].end === classes[j].start) {
+                        hasIntersection = true;
                     }
                 }
             }
         }
-        return { hasOverlap: false };
+        return { hasOverlap, hasIntersection };
     }
 
 // دالة تحويل الوقت النصي إلى دقائق منذ بداية اليوم

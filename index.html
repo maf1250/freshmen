@@ -501,22 +501,23 @@
             .toLowerCase();
     }
 
-    // دوال نظام إدخال الرزم التفاعلي (Tags)
-    function handleCRNInput(event, pkgId) {
-        if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space') {
-            event.preventDefault(); // منع تحديث الصفحة أو النزول للأسفل
-            let inputEl = document.getElementById(`pkg-crns-input-${pkgId}`);
-            let crns = inputEl.value.split(/[\s,،]+/).filter(c => c.trim() !== "");
-            
-            crns.forEach(crn => {
-                addCRNTag(crn, pkgId);
-            });
-            
-            inputEl.value = '';
-            updateHiddenCRNs(pkgId);
-            savePackagesToLocal();
+    // دوال نظام إدخال الرزم التفاعلي
+function handleCRNInput(event, pkgId) {
+    let inputEl = document.getElementById(`pkg-crns-input-${pkgId}`);
+    if (event.key === 'Enter' || event.key === ' ' || event.code === 'Space' || event.key === 'Tab') {
+        if (event.key === 'Tab' && inputEl.value.trim() === '') {
+            return;
         }
+        event.preventDefault(); 
+        let crns = inputEl.value.split(/[\s,،]+/).filter(c => c.trim() !== "");
+        crns.forEach(crn => {
+            addCRNTag(crn, pkgId);
+        });  
+        inputEl.value = '';
+        updateHiddenCRNs(pkgId);
+        savePackagesToLocal();
     }
+}
 
     function determineCRNColor(crn, prog) {
         let cleanCrn = String(crn).trim();

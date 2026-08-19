@@ -664,7 +664,7 @@
             card.className = 'package-card';
             card.innerHTML = `
                 <h3>رزمة رقم ${i}</h3>
-                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 10px;">
+                  <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>التخصص المستهدف:</label>
                         <select id="pkg-program-${i}" onchange="revalidatePackageTags(${i})" style="width: max-content; min-width: 200px;">
@@ -674,7 +674,7 @@
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>السعة القصوى:</label>
-                        <input type="number" id="pkg-capacity-${i}" min="1" value="20" onkeypress="return event.charCode >= 48 && event.charCode <= 57" oninput="this.value = this.value.replace(/[^0-9]/g, '')" onchange="savePackagesToLocal()" style="width: 100px; text-align: center;">
+                        <input type="number" id="pkg-capacity-${i}" min="1" max="500" value="20" onkeypress="return event.charCode >= 48 && event.charCode <= 57" oninput="this.value = this.value.replace(/[^0-9]/g, '')" onchange="savePackagesToLocal()" style="width: 100px; text-align: center;">
                     </div>
                 </div>
                 <div class="form-group">

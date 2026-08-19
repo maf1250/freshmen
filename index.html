@@ -147,6 +147,14 @@
 .course-badge strong { color: #008e7e; display: block; font-size: 14px; margin-bottom: 5px; border-bottom: 1px dashed #b2d8d3; padding-bottom: 3px;}
 .course-badge .time { color: #555; font-size: 12px; font-weight: bold; }
 
+        /* ستايلات الجدول الزمني التفاعلي */
+.schedule-grid-container { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; overflow-x: auto; padding-bottom: 15px; }
+.day-time-row { display: flex; align-items: stretch; background: #fff; border: 1px solid #cbe6e3; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 5px rgba(0,0,0,0.05); min-width: max-content; }
+.day-time-label { width: 100px; background: #008e7e; color: #fff; display: flex; justify-content: center; align-items: center; font-weight: 800; font-size: 16px; flex-shrink: 0; position: sticky; right: 0; z-index: 2; border-left: 2px solid #fff; }
+.day-time-courses { display: flex; flex-wrap: nowrap; gap: 0; padding: 10px; flex-grow: 1; align-items: center; }
+.time-gap { display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 11px; font-weight: bold; border-left: 1px dashed #eee; flex-shrink: 0; }
+.time-course-card { box-sizing: border-box; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-radius: 4px; }
+        
         /* ستايل نظام إدخال الأرقام المرجعية  */
 .crn-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 34px;}
 .crn-tag { padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s;}
@@ -1167,91 +1175,183 @@ function savePhysicsSetting() {
         return { hasOverlap: false };
     }
 
+    // دالة تحويل الوقت النصي إلى دقائق منذ بداية اليوم
+function parseTimeToMinutes(timeStr) {
+    if (!timeStr || timeStr === '-' || timeStr.includes('غير محدد')) return null;
+    let parts = String(timeStr).replace(/[–—−]/g, "-").split(/\s*[-–—−]\s*/).map(x => x.trim());
+    if (parts.length !== 2) return null;
+
+    function toMinutes(t) {
+        let hrs, mins;
+        if (t.includes(":")) {
+            let p = t.split(":");
+            hrs = parseInt(p[0], 10);
+            mins = parseInt(p[1], 10);
+        } else if (t.length === 4) {
+            hrs = parseInt(t.substring(0,2), 10);
+            mins = parseInt(t.substring(2,4), 10);
+        } else if (t.length === 3) {
+            hrs = parseInt(t.substring(0,1), 10);
+            mins = parseInt(t.substring(1,3), 10);
+        } else return null;
+
+        if (t.includes("م") && hrs < 12) hrs += 12;
+        if (t.includes("ص") && hrs === 12) hrs = 0;
+        if (!t.includes("م") && !t.includes("ص")) {
+            if (hrs >= 1 && hrs <= 7) hrs += 12; // من 1 إلى 7 يعتبر مسائي
+        }
+        return hrs * 60 + mins;
+    }
+
+    let start = toMinutes(parts[0]);
+    let end = toMinutes(parts[1]);
+    if (start == null || end == null) return null;
+    return { start: Math.min(start, end), end: Math.max(start, end), text: timeStr };
+}
+
     function openScheduleModal(studentName, crnsArray) {
-        if (!crnsArray || crnsArray.length === 0) return;
-        document.getElementById('modal-title').innerText = `جدول: ${studentName}`;
-        const content = document.getElementById('modal-content-area');
-        
-        let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
-        let notFoundCRNs = [];
+    if (!crnsArray || crnsArray.length === 0) return;
+    document.getElementById('modal-title').innerText = `جدول: ${studentName}`;
+    const content = document.getElementById('modal-content-area');
+    
+    let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+    let notFoundCRNs = [];
+    let earliestStartTime = 9999; // لتحديد بداية الجدول
 
-        crnsArray.forEach(crn => {
-            let details = globalCRNDetails[crn.trim()];
-            if (details) {
-                details.parts.forEach(part => {
-                    let dayStr = String(part.days).replace(/\s/g, '');
-                    let isMapped = false;
-                    let times = String(part.time).match(/\d+/g);
-                    let start = 9999, end = 9999;
-                    if (times && times.length >= 2) {
-                        start = Math.min(parseInt(times[0], 10), parseInt(times[1], 10));
-                        end = Math.max(parseInt(times[0], 10), parseInt(times[1], 10));
-                    }
-                    
-                    let courseLabel = details.type ? `${details.course} <br><span style="font-size:11px; color:#555;">(${details.type})</span>` : details.course;
-                    let courseInstance = { crn: crn.trim(), course: courseLabel, time: part.time, type: details.type || '', start: start, end: end, isConflicting: false };
-
-                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
-                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
-                    if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
-                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
-                    if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
-                    
-                    if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
-                });
-            } else {
-                notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
-            }
-        });
-
-        let html = `<table class="schedule-h-table"><tbody>`;
-        
-        for (let day in daysMap) {
-            if (daysMap[day].length > 0) {
-                daysMap[day].sort((a, b) => a.start - b.start);
-
-                for (let i = 0; i < daysMap[day].length; i++) {
-                    for (let j = 0; j < daysMap[day].length; j++) {
-                        if (i !== j) {
-                            if (Math.max(daysMap[day][i].start, daysMap[day][j].start) < Math.min(daysMap[day][i].end, daysMap[day][j].end)) {
-                                daysMap[day][i].isConflicting = true;
-                            }
-                        }
-                    }
+    crnsArray.forEach(crn => {
+        let details = globalCRNDetails[crn.trim()];
+        if (details) {
+            details.parts.forEach(part => {
+                let dayStr = String(part.days).replace(/\s/g, '');
+                let isMapped = false;
+                
+                let timeData = parseTimeToMinutes(part.time);
+                if (timeData) {
+                    if (timeData.start < earliestStartTime) earliestStartTime = timeData.start;
                 }
 
-                html += `<tr><th>${day}</th><td style="text-align:right; direction: rtl;">`;
-                daysMap[day].forEach(course => {
-                    let borderColor = "#8dc63f"; 
-                    let bgColor = "#eef7f6"; 
-                    if (course.type.includes('نظري')) { borderColor = "#006d60"; bgColor = "#e5f0ef"; } 
-                    else if (course.type.includes('عملي')) { borderColor = "#8dc63f"; bgColor = "#f6fcf3"; }
-                    
-                    let warningIcon = '';
-                    if (course.isConflicting) {
-                        borderColor = "#dc3545"; bgColor = "#f8d7da";
-                        warningIcon = '⚠️ <span style="color:#dc3545; font-size:11px;">(تعارض زمني)</span><br>';
-                    }
+                let courseLabel = details.type ? `${details.course}` : details.course;
+                let courseInstance = { 
+                    crn: crn.trim(), course: courseLabel, timeText: part.time, 
+                    type: details.type || '', 
+                    start: timeData ? timeData.start : 9999, 
+                    end: timeData ? timeData.end : 9999, 
+                    isConflicting: false 
+                };
 
-                    html += `<div class="course-badge" style="border-right-color: ${borderColor}; border-right-width: 5px; background-color: ${bgColor};">
-                                <strong>${warningIcon}${course.course} <span style="color:#333; font-size:11px;">(${course.crn})</span></strong>
-                                <span class="time">🕒 <span dir="ltr" style="display: inline-block;">${course.time}</span></span>
-                             </div>`;
-                });
-                html += `</td></tr>`;
+                // إذا فشل تحليل الوقت يتم رميه في قائمة المجهول
+                if (!timeData) {
+                    notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+                    return;
+                }
+
+                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
+                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
+                
+                if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+            });
+        } else {
+            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
+        }
+    });
+
+    const PX_PER_MIN = 2.5; // كل دقيقة تمثل 2.5 بيكسل
+    let baseStartTime = earliestStartTime === 9999 ? 480 : earliestStartTime; // البداية الافتراضية 8:00 ص
+
+    let html = `<div class="schedule-grid-container">`;
+    
+    for (let day in daysMap) {
+        let classesToday = daysMap[day];
+        if (classesToday.length > 0) {
+            // ترتيب المحاضرات حسب وقت البدء
+            classesToday.sort((a, b) => a.start - b.start);
+
+            // اكتشاف التعارض
+            for (let i = 0; i < classesToday.length - 1; i++) {
+                if (classesToday[i].end > classesToday[i+1].start) {
+                    classesToday[i].isConflicting = true;
+                    classesToday[i+1].isConflicting = true;
+                }
             }
-        }
-        html += `</tbody></table>`;
 
-        if (notFoundCRNs.length > 0) {
-            html += `<h4 style="color:#dc3545; margin-top:15px;">مقررات لم يتم التعرف على أيامها:</h4><ul>`;
-            notFoundCRNs.forEach(c => { html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span></li>`; });
-            html += `</ul>`;
+            html += `<div class="day-time-row">
+                        <div class="day-time-label">${day}</div>
+                        <div class="day-time-courses">`;
+            
+            let currentCursor = baseStartTime;
+            
+            classesToday.forEach(course => {
+                // حساب الفراغ قبل المحاضرة
+                let gapMinutes = course.start - currentCursor;
+                if (gapMinutes < 0) gapMinutes = 0; // في حال التعارض
+                
+                let durationMinutes = course.end - course.start;
+                if (durationMinutes <= 0) durationMinutes = 50; 
+                
+                let gapPixels = gapMinutes * PX_PER_MIN;
+                let cardPixels = durationMinutes * PX_PER_MIN;
+
+                currentCursor = course.end; // تحديث المؤشر
+
+                // الألوان والستايلات
+                let borderColor = "#8dc63f"; 
+                let bgColor = "#f6fcf3"; 
+                let titleColor = "#5c8a24";
+                let typeEmoji = "🛠️";
+
+                if (course.type.includes('نظري') || course.type.includes('محاضرة')) { 
+                    borderColor = "#008e7e"; bgColor = "#eef7f6"; titleColor = "#008e7e"; typeEmoji = "📘";
+                }
+                
+                let warningIcon = '';
+                if (course.isConflicting) {
+                    borderColor = "#dc3545"; bgColor = "#f8d7da"; titleColor = "#dc3545";
+                    warningIcon = '⚠️ <span style="font-size:10px; color:#dc3545;">تعارض</span>';
+                }
+
+                // رسم الفراغ (البريك) إن وجد
+                if (gapMinutes > 0) {
+                    let gapText = '';
+                    if (gapMinutes >= 15) {
+                        let h = Math.floor(gapMinutes / 60);
+                        let m = gapMinutes % 60;
+                        if (h > 0) gapText += h + 'س ';
+                        if (m > 0) gapText += m + 'د';
+                    }
+                    html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
+                }
+
+                // رسم بطاقة المقرر
+                html += `
+                    <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 8px;">
+                        <strong style="color:${titleColor}; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 4px; margin-bottom: 4px; display:flex; justify-content:space-between;">
+                            <span>${warningIcon || course.course}</span>
+                            <span>${typeEmoji}</span>
+                        </strong>
+                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
+                            <span style="color:#555; direction:ltr; font-weight:bold;">${course.timeText}</span>
+                            <span style="background:${borderColor}; color:#fff; padding:2px 5px; border-radius:3px; font-weight:bold;">${course.crn}</span>
+                        </div>
+                    </div>`;
+            });
+            html += `</div></div>`;
         }
-        content.innerHTML = html;
-        document.getElementById('schedule-modal').style.display = 'flex';
-        document.body.style.overflow = 'hidden';
     }
+    html += `</div>`;
+
+    if (notFoundCRNs.length > 0) {
+        html += `<h4 style="color:#dc3545; margin-top:15px; border-top: 1px dashed #ccc; padding-top: 15px;">مقررات لم يتم التعرف على أوقاتها أو أيامها:</h4><ul>`;
+        notFoundCRNs.forEach(c => { html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span> (${c.days})</li>`; });
+        html += `</ul>`;
+    }
+    
+    content.innerHTML = html;
+    document.getElementById('schedule-modal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
 
     function closeScheduleModal(event) {
         if (event) event.stopPropagation();

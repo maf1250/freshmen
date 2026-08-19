@@ -1175,7 +1175,7 @@ function savePhysicsSetting() {
         return { hasOverlap: false };
     }
 
-    // دالة تحويل الوقت النصي إلى دقائق منذ بداية اليوم
+// دالة تحويل الوقت النصي إلى دقائق منذ بداية اليوم
 function parseTimeToMinutes(timeStr) {
     if (!timeStr || timeStr === '-' || timeStr.includes('غير محدد')) return null;
     let parts = String(timeStr).replace(/[–—−]/g, "-").split(/\s*[-–—−]\s*/).map(x => x.trim());
@@ -1197,18 +1197,16 @@ function parseTimeToMinutes(timeStr) {
 
         if (t.includes("م") && hrs < 12) hrs += 12;
         if (t.includes("ص") && hrs === 12) hrs = 0;
-        if (!t.includes("م") && !t.includes("ص")) {
-            if (hrs >= 1 && hrs <= 7) hrs += 12; // من 1 إلى 7 يعتبر مسائي
-        }
+        
         return hrs * 60 + mins;
     }
 
     let start = toMinutes(parts[0]);
     let end = toMinutes(parts[1]);
     if (start == null || end == null) return null;
+    
     return { start: Math.min(start, end), end: Math.max(start, end), text: timeStr };
 }
-
     function openScheduleModal(studentName, crnsArray) {
     if (!crnsArray || crnsArray.length === 0) return;
     document.getElementById('modal-title').innerText = `جدول: ${studentName}`;
@@ -1258,7 +1256,7 @@ function parseTimeToMinutes(timeStr) {
         }
     });
 
-    const PX_PER_MIN = 2.5; // كل دقيقة تمثل 2.5 بيكسل
+    const PX_PER_MIN = 2.0;
     let baseStartTime = earliestStartTime === 9999 ? 480 : earliestStartTime; // البداية الافتراضية 8:00 ص
 
     let html = `<div class="schedule-grid-container">`;

@@ -1267,11 +1267,18 @@ function parseTimeToMinutes(timeStr) {
             // ترتيب المحاضرات حسب وقت البدء
             classesToday.sort((a, b) => a.start - b.start);
 
-            // اكتشاف التعارض
+           // اكتشاف التعارض والتقاطع
             for (let i = 0; i < classesToday.length - 1; i++) {
-                if (classesToday[i].end > classesToday[i+1].start) {
-                    classesToday[i].isConflicting = true;
-                    classesToday[i+1].isConflicting = true;
+                for (let j = i + 1; j < classesToday.length; j++) {
+                    if (classesToday[i].end > classesToday[j].start) {
+                        classesToday[i].isConflicting = true;
+                        classesToday[j].isConflicting = true;
+                    } else if (classesToday[i].end === classesToday[j].start) {
+                        classesToday[i].isIntersecting = true;
+                        classesToday[j].isIntersecting = true;
+                    } else {
+                        break;
+                    }
                 }
             }
 
@@ -1294,7 +1301,7 @@ function parseTimeToMinutes(timeStr) {
 
                 currentCursor = course.end; // تحديث المؤشر
 
-                // الألوان والستايلات
+                // الألوان والستايلات الأساسية
                 let borderColor = "#8dc63f"; 
                 let bgColor = "#f6fcf3"; 
                 let titleColor = "#5c8a24";
@@ -1304,13 +1311,17 @@ function parseTimeToMinutes(timeStr) {
                     borderColor = "#008e7e"; bgColor = "#eef7f6"; titleColor = "#008e7e"; typeEmoji = "📘";
                 }
                 
-                let warningIcon = '';
+                let warningBadge = '';
+                
+                // ألوان التعارض والتقاطع
                 if (course.isConflicting) {
                     borderColor = "#dc3545"; bgColor = "#f8d7da"; titleColor = "#dc3545";
-                    warningIcon = '⚠️ <span style="font-size:10px; color:#dc3545;">تعارض</span>';
+                    warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px; flex-shrink:0;">🚫 تعارض</span>';
+                } else if (course.isIntersecting) {
+                    borderColor = "#f39c12"; bgColor = "#fff3cd"; titleColor = "#d35400";
+                    warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px; flex-shrink:0;">⚠️ تقاطع</span>';
                 }
 
-                // رسم الفراغ (البريك) إن وجد
                 if (gapMinutes > 0) {
                     let gapText = '';
                     if (gapMinutes >= 15) {
@@ -1322,18 +1333,21 @@ function parseTimeToMinutes(timeStr) {
                     html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
                 }
 
-                // رسم بطاقة المقرر
                 html += `
-                    <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 8px;">
-                        <strong style="color:${titleColor}; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 4px; margin-bottom: 4px; display:flex; justify-content:space-between;">
-                            <span>${warningIcon || course.course}</span>
-                            <span>${typeEmoji}</span>
+                    <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 6px; justify-content: center; gap: 4px;">
+                        <strong style="color:${titleColor}; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 3px; display:flex; justify-content:space-between; align-items:center;">
+                            <div style="display:flex; align-items:center; overflow:hidden;">
+                                ${warningBadge}
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${course.course}">${course.course}</span>
+                            </div>
+                            <span style="flex-shrink:0; margin-right:4px;">${typeEmoji}</span>
                         </strong>
-                        <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px;">
-                            <span style="color:#555; direction:ltr; font-weight:bold;">${course.timeText}</span>
-                            <span style="background:${borderColor}; color:#fff; padding:2px 5px; border-radius:3px; font-weight:bold;">${course.crn}</span>
+                        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:4px; font-size:10.5px;">
+                            <span style="color:#555; direction:ltr; font-weight:bold; white-space:nowrap;">${course.timeText}</span>
+                            <span style="background:${borderColor}; color:#fff; padding:1px 4px; border-radius:3px; font-weight:bold;">${course.crn}</span>
                         </div>
                     </div>`;
+            });
             });
             html += `</div></div>`;
         }

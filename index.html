@@ -524,23 +524,63 @@
             return 'red'; // غير موجود في SS01
         }
         
-        let rawCourse = globalCRNDetails[cleanCrn].course;
+        let rawCourse = globalCRNDetails[cleanCrn].course || '';
         let rawName = globalCRNDetails[cleanCrn].name || '';
-        let normCourse = globalNormalizeCode(rawCourse + rawName);
         
-        // التحقق من وجوده في خطة المستوى الأول للتخصص المختار
-        if (prog && dynamicSC04Plan[prog]) {
-            let planCourses = Array.from(dynamicSC04Plan[prog].courses);
-            let isLevel1 = planCourses.some(planCourse => {
-                let normPlan = globalNormalizeCode(planCourse);
-                return normCourse.includes(normPlan) || normPlan.includes(globalNormalizeCode(rawCourse));
-            });
-            if (isLevel1) return 'green'; // مستوى أول
+        let normCourse = globalNormalizeCode(rawCourse + rawName);
+        let normRawOnly = globalNormalizeCode(rawCourse);
+
+        // --- 1. المطابقة الذكية لاسم التخصص (Fuzzy Matching) ---
+        let planData = null;
+        if (prog && Object.keys(dynamicSC04Plan).length > 0) {
+            let programClean = prog.trim();
+            if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                planData = dynamicSC04Plan[programClean];
+            } else {
+                for (let key of Object.keys(dynamicSC04Plan)) {
+                    if (programClean.includes(key) || key.includes(programClean)) {
+                        planData = dynamicSC04Plan[key];
+                        break;
+                    }
+                }
+            }
         }
         
-        return 'orange'; // موجود في SS01 لكنه خارج خطة المستوى الأول لهذا التخصص
+        // --- 2. التحقق من وجود المقرر في خطة المستوى الأول ---
+        if (planData) {
+            let planCourses = Array.from(planData.courses);
+            let isLevel1 = planCourses.some(planCourse => {
+                let normPlan = globalNormalizeCode(planCourse);
+                
+                // أ- المطابقة المباشرة للنصوص
+                if (normCourse.includes(normPlan) || normPlan.includes(normRawOnly)) return true;
+                
+                // ب- المطابقة المتقدمة لمعالجة اختلاف الترتيب (مثل 101عرب مقابل عرب101)
+                let extractAlphaNum = (text) => {
+                    let nums = text.replace(/[^0-9]/g, ''); // سحب الأرقام فقط
+                    let chars = text.replace(/[0-9]/g, ''); // سحب الحروف فقط
+                    return { nums, chars };
+                };
+                
+                let planParts = extractAlphaNum(normPlan);
+                let crnParts = extractAlphaNum(normRawOnly);
+                
+                // التحقق: إذا كانت الأرقام متطابقة، والحروف متطابقة أو متداخلة
+                if (planParts.nums && crnParts.nums && planParts.nums === crnParts.nums) {
+                    if (planParts.chars.includes(crnParts.chars) || crnParts.chars.includes(planParts.chars)) {
+                        return true;
+                    }
+                }
+                
+                return false;
+            });
+            
+            if (isLevel1) return 'green'; // متطابق مع المستوى الأول
+        }
+        
+        return 'orange'; // موجود في الجدول لكنه لم يتطابق مع المستوى الأول لهذا التخصص
     }
-
+    
     function addCRNTag(crn, pkgId, skipUpdate = false) {
         let crnStr = String(crn).trim();
         if (!crnStr) return;

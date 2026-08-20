@@ -12,7 +12,7 @@
         * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
         body { background-color: #f4f9f8; color: #333; margin: 0; padding: 40px 20px; display: flex; justify-content: center; align-items: flex-start; min-height: 100vh;}
         
-        .page { background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; display: none; }
+        .page { background-color: #fff; padding: 30px; border-radius: 12px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); width: 100%; display: none; position: relative;}
         .page.active { display: block; }
         
         #page-1 { max-width: 800px; }
@@ -203,7 +203,7 @@
             </a>
             
 <!-- زر المراسلة -->
-    <button class="contact-btn" onclick="openContactModal()" title="تواصل معنا">
+   <button class="contact-btn" onclick="openContactModal()" title="تواصل معنا">
         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>

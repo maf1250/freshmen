@@ -295,9 +295,9 @@
         </div>
 
         <div id="packages-container" class="packages-grid">
-            <!-- سيتم توليد الرزم هنا عبر الجافاسكربت -->
         </div>
 
+        <div id="status-2" class="status-msg" style="margin-top: 0; margin-bottom: 15px;"></div>
         <div style="display: flex; gap: 10px;">
             <button class="btn-action btn-secondary" onclick="switchPage('page-1')" style="flex: 1;">رجوع</button>
             <button class="btn-process" onclick="processAssignments()" style="flex: 3;">
@@ -305,7 +305,6 @@
                 <span id="btnText-2">تنفيذ الإسناد وعرض النتائج</span>
             </button>
         </div>
-        <div id="status-2" class="status-msg"></div>
     </div>
 
     <!-- ==================== الصفحة الثالثة: النتائج ==================== -->
@@ -817,8 +816,18 @@ function savePhysicsSetting() {
             let cap = parseInt(document.getElementById(`pkg-capacity-${i}`).value) || 0;
             let crnsRaw = document.getElementById(`pkg-crns-${i}`).value;
             
-            if (!prog || prog === "" || !crnsRaw) {
-                status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (تحديد التخصص والأرقام المرجعية).`;
+            let missingProg = !prog || prog === "";
+            let missingCRNs = !crnsRaw || crnsRaw.trim() === "";
+
+            if (missingProg || missingCRNs) {
+                if (missingProg && missingCRNs) {
+                    status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (تحديد التخصص والأرقام المرجعية [هل قمت بالضغط على Enter في خانة الأرقام المرجعية]).`;
+                } else if (missingProg) {
+                    status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (تحديد التخصص).`;
+                } else if (missingCRNs) {
+                    status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (الأرقام المرجعية [هل قمت بالضغط على Enter في الخانة]).`;
+                }
+                
                 document.getElementById('loader-2').style.display = 'none';
                 document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
                 return;

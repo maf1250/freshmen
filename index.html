@@ -1185,38 +1185,76 @@ if (st.assignedCRNs && st.assignedCRNs.length > 0) {
         let errorsListHTML = '';
         let hasCriticalErrors = false;
 
-        // فحص المتدربين بحثاً عن الأخطاء
-        targetTrainees.forEach(st => {
-            let issues = [];
+        // كائن لتجميع الأخطاء وتصنيفها حسب الرزمة (بدلاً من المتدربين)
+        let packageErrors = {};
+        let unassignedCount = 0;
 
+        // فحص المتدربين وتجميع أخطائهم تحت رزمهم
+        targetTrainees.forEach(st => {
             if (!st.assignedPackage || !st.assignedCRNs || st.assignedCRNs.length === 0) {
-                issues.push('غير مسند له أي رزمة');
-            } else {
+                unassignedCount++;
+                return; // تجاوز الفحص إذا كان غير مسند
+            }
+
+            let pkgId = st.assignedPackage;
+            
+            // إذا لم نقم بفحص هذه الرزمة مسبقاً
+            if (!packageErrors[pkgId]) {
+                let issues = [];
+
                 // 1. فحص التعارضات الزمنية
                 let conflicts = checkScheduleConflicts(st.assignedCRNs);
-                if (conflicts.hasOverlap) issues.push('تعارض في أوقات الجدول');
-                else if (conflicts.hasIntersection) issues.push('تقاطع في أوقات الجدول');
+                if (conflicts.hasOverlap) issues.push('تعارض زمني');
+                else if (conflicts.hasIntersection) issues.push('تقاطع زمني');
 
                 // 2. فحص تجاوز السعة الاستيعابية
                 let hasCapacityIssue = st.assignedCRNs.some(crn => {
                     let c = String(crn).trim();
                     return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
                 });
-                if (hasCapacityIssue) issues.push('تجاوز السعة في إحدى الشعب');
+                if (hasCapacityIssue) issues.push('تجاوز السعة الاستيعابية');
 
-                // 3. فحص اكتمال الخطة التدريبية (إذا كان ملف SC04 مرفقاً)
+                // 3. فحص اكتمال الخطة التدريبية
                 let planIssues = getPlanIssuesForRayat(st);
                 if (planIssues) issues.push(planIssues);
-            }
 
-            if (issues.length > 0) {
-                hasCriticalErrors = true;
-                errorsListHTML += `<li style="margin-bottom: 8px; border-bottom: 1px dashed #f5c6cb; padding-bottom: 5px;">
-                    <strong style="color: #721c24;">${st.name || st.id}:</strong> 
-                    <span style="color: #dc3545; font-weight: 600;">${issues.join('، ')}</span>
-                </li>`;
+                if (issues.length > 0) {
+                    packageErrors[pkgId] = {
+                        issues: issues,
+                        traineeCount: 1, // نبدأ العد بواحد
+                        program: st.program
+                    };
+                } else {
+                    // الرزمة سليمة ولا يوجد بها مشاكل
+                    packageErrors[pkgId] = { issues: [], traineeCount: 1 }; 
+                }
+            } else {
+                // إذا تم فحص الرزمة مسبقاً، نكتفي بزيادة عدد المتدربين المتأثرين
+                packageErrors[pkgId].traineeCount++;
             }
         });
+
+        // بناء قائمة الأخطاء المجمعة لعرضها في النافذة
+        for (let pkgId in packageErrors) {
+            let pkg = packageErrors[pkgId];
+            if (pkg.issues.length > 0) {
+                hasCriticalErrors = true;
+                errorsListHTML += `<li style="margin-bottom: 12px; border-bottom: 1px dashed #f5c6cb; padding-bottom: 8px;">
+                    <strong style="color: #721c24;">📦 رزمة رقم ${pkgId} (${pkg.program}):</strong> 
+                    <span style="color: #dc3545; font-weight: 600;">${pkg.issues.join('، ')}</span>
+                    <br><span style="font-size: 11px; background: rgba(220,53,69,0.1); padding: 3px 6px; border-radius: 4px; color: #721c24; margin-top: 5px; display: inline-block;">(تؤثر على ${pkg.traineeCount} متدرب/ـة)</span>
+                </li>`;
+            }
+        }
+
+        // إضافة تنبيه للمتدربين غير المسندين (إن وجدوا)
+        if (unassignedCount > 0) {
+            hasCriticalErrors = true;
+            errorsListHTML += `<li style="margin-bottom: 12px; border-bottom: 1px dashed #f5c6cb; padding-bottom: 8px;">
+                <strong style="color: #721c24;">⚠️ متدربين بلا رزم:</strong> 
+                <span style="color: #dc3545; font-weight: 600;">يوجد ${unassignedCount} متدرب لم يُسند لهم أي رزمة (ولن يتم نسخهم).</span>
+            </li>`;
+        }
 
         // إذا وجدت أخطاء، افتح النافذة المنبثقة للتأكيد
         if (hasCriticalErrors) {
@@ -1228,137 +1266,6 @@ if (st.assignedCRNs && st.assignedCRNs.length > 0) {
             // إذا لم توجد أخطاء، انسخ مباشرة
             executeCopy(targetTrainees);
         }
-    }
-
-    // دالة تنفيذ النسخ الفعلية
-    function executeCopy(targetTrainees) {
-        let textToCopy = "";
-        targetTrainees.forEach(st => {
-            if (st.assignedCRNs && st.assignedCRNs.length > 0) {
-                let line = st.id + '\t' + st.assignedCRNs.join('\t');
-                textToCopy += line + '\n';
-            }
-        });
-
-        if (textToCopy.trim() === "") { 
-            showToast('لا توجد أرقام مرجعية مسندة لنسخها!'); 
-            closeRayatModal();
-            return; 
-        }
-        
-        navigator.clipboard.writeText(textToCopy.trim()).then(() => { 
-            showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!'); 
-            closeRayatModal();
-        }).catch(err => { 
-            showToast('❌ حدث خطأ أثناء النسخ'); 
-        });
-    }
-
-    // إغلاق نافذة تأكيد النسخ
-    function closeRayatModal(event) {
-        if (event) event.stopPropagation();
-        document.getElementById('rayat-confirm-modal').style.display = 'none';
-        document.body.style.overflow = '';
-    }
-
-    // المتابعة رغم الأخطاء
-    function proceedCopyToRayat() {
-        if (pendingRayatTrainees.length > 0) {
-            executeCopy(pendingRayatTrainees);
-        }
-    }
-
-    // دالة مساعدة لاكتشاف مشاكل الخطة للمتدرب (نقص/زيادة/شعب دخيلة)
-    function getPlanIssuesForRayat(st) {
-        if (!st.program || !isSc04Attached || Object.keys(dynamicSC04Plan).length === 0) return null;
-
-        const normalizeCode = (code) => {
-            if (!code) return '';
-            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
-        };
-
-        let planData = null;
-        let programClean = st.program.trim();
-        
-        if (dynamicSC04Plan.hasOwnProperty(programClean)) {
-            planData = dynamicSC04Plan[programClean];
-        } else {
-            for (let key of Object.keys(dynamicSC04Plan)) {
-                if (isProgramMatch(programClean, key)) {
-                    planData = dynamicSC04Plan[key];
-                    break;
-                }
-            }
-        }
-
-        if (!planData) return 'التخصص غير مدرج بخطة SC04';
-
-        let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0;
-        let validStudentPartsCount = 0;
-        let hasUnmapped = false;
-
-        let planCoursesList = Array.from(planData.courses);
-        let studentCoursesMap = {};
-
-        if (st.assignedCRNs) {
-            st.assignedCRNs.forEach(crn => {
-                let crnClean = String(crn).trim();
-                if (globalCRNDetails[crnClean]) {
-                    let rawCourse = globalCRNDetails[crnClean].course;
-                    let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
-                    let normCourse = normalizeCode(rawCourse);
-                    if (!studentCoursesMap[normCourse]) studentCoursesMap[normCourse] = { count: 0, types: [] };
-                    studentCoursesMap[normCourse].count++;
-                    studentCoursesMap[normCourse].types.push(typeStr);
-                }
-            });
-        }
-
-        let requiredParts = 0;
-
-        planCoursesList.forEach(planCourse => {
-            let normPlanCourse = normalizeCode(planCourse);
-            let reqForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
-
-            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                reqForThis = 1;
-            }
-            requiredParts += reqForThis;
-
-            let assignedForThis = 0;
-            for (let studentNormCourse in studentCoursesMap) {
-                if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
-                    let stat = studentCoursesMap[studentNormCourse];
-                    if (reqForThis === 2) {
-                        let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
-                        let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-                        let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
-
-                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
-                            assignedForThis = 2;
-                        } else if (stat.count >= 2) {
-                            assignedForThis = 1; 
-                        } else {
-                            assignedForThis = stat.count;
-                        }
-                    } else {
-                        assignedForThis = stat.count;
-                    }
-                    break;
-                }
-            }
-            validStudentPartsCount += Math.min(assignedForThis, reqForThis);
-        });
-
-        if (studentPartsCount > validStudentPartsCount) hasUnmapped = true;
-
-        let planIssues = [];
-        if (validStudentPartsCount < requiredParts) planIssues.push("الجدول ناقص");
-        if (validStudentPartsCount > requiredParts) planIssues.push("مقررات زائدة عن المطلوب");
-        if (hasUnmapped) planIssues.push("توجد شعب دخيلة/مخالفة للخطة");
-
-        return planIssues.length > 0 ? planIssues.join(' و ') : null;
     }
 
     function switchPage(pageId) {

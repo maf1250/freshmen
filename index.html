@@ -1092,7 +1092,7 @@ function savePhysicsSetting() {
             
             if (st.program) {
                 if (!isSc04Attached) {
-                    planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يُرفق SC04</span></td>`;
+                    planStatusHtml = `<td><span class="badge" style="background:#e2e3e5; color:#383d41;">لم يتم إرفاق تقرير الخطط SC04</span></td>`;
                 } 
                 else if (Object.keys(dynamicSC04Plan).length === 0) {
                     planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">لم يعثر على خطة للمستوى الأول بالملف</span></td>`;
@@ -1120,20 +1120,20 @@ function savePhysicsSetting() {
                         let badgeHover = "onmouseover=\"this.style.transform='scale(1.05)'; this.style.opacity='0.9';\" onmouseout=\"this.style.transform='scale(1)'; this.style.opacity='1';\"";
                         let clickAction = `onclick="openPlanModal('${studentNameEscaped}', '${programEscaped}', ${strCrnsEscaped})" title="انقر لعرض تفاصيل المقررات"`;
 
-                       let unmappedWarning = hasUnmapped ? `<br><span style="font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold;">⚠️ يتضمن شعب دخيلة</span>` : '';
+                        let unmappedWarning = hasUnmapped ? `<br><span ${clickAction} ${badgeHover} style="cursor:pointer; font-size:11px; background:#fff; color:#dc3545; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; border:1px solid #dc3545; font-weight:bold; transition: 0.2s;">⚠️ يتضمن شعب دخيلة</span>` : '';
 
-                        // فحص السعة لتنبيه الجدول الخارجي
-                        let capacityWarning = '';
-                        if (st.assignedCRNs && st.assignedCRNs.length > 0) {
-                            let hasCapacityIssue = st.assignedCRNs.some(crn => {
-                                let c = String(crn).trim();
-                                return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
-                            });
-                            
-                            if (hasCapacityIssue) {
-                                capacityWarning = `<br><span style="font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 تجاوز السعة</span>`;
-                            }
-                        }
+// فحص السعة لتنبيه الجدول الخارجي
+let capacityWarning = '';
+if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+    let hasCapacityIssue = st.assignedCRNs.some(crn => {
+        let c = String(crn).trim();
+        return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
+    });
+    
+    if (hasCapacityIssue) {
+        capacityWarning = `<br><span ${clickAction} ${badgeHover} style="cursor:pointer; font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;">🚫 تجاوز السعة</span>`;
+    }
+}
 
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
@@ -1166,15 +1166,73 @@ function savePhysicsSetting() {
         container.innerHTML = tableHTML;
     }
 
+    // مصفوفة لتخزين المتدربين مؤقتاً في حال انتظار تأكيد النسخ
+    let pendingRayatTrainees = [];
+
     function copyFilteredToRayat() {
         const selectedProg = document.getElementById('result-program-filter').value;
-        let textToCopy = "";
         let targetTrainees = [];
         
         if (selectedProg === 'الكل') targetTrainees = traineesData;
         else if (selectedProg === 'غير مسند') targetTrainees = traineesData.filter(t => t.assignedPackage === null);
         else targetTrainees = traineesData.filter(t => t.program === selectedProg);
         
+        if (targetTrainees.length === 0) { 
+            showToast('لا توجد بيانات في هذا التصنيف للنسخ!'); 
+            return; 
+        }
+
+        let errorsListHTML = '';
+        let hasCriticalErrors = false;
+
+        // فحص المتدربين بحثاً عن الأخطاء
+        targetTrainees.forEach(st => {
+            let issues = [];
+
+            if (!st.assignedPackage || !st.assignedCRNs || st.assignedCRNs.length === 0) {
+                issues.push('غير مسند له أي رزمة');
+            } else {
+                // 1. فحص التعارضات الزمنية
+                let conflicts = checkScheduleConflicts(st.assignedCRNs);
+                if (conflicts.hasOverlap) issues.push('تعارض في أوقات الجدول');
+                else if (conflicts.hasIntersection) issues.push('تقاطع في أوقات الجدول');
+
+                // 2. فحص تجاوز السعة الاستيعابية
+                let hasCapacityIssue = st.assignedCRNs.some(crn => {
+                    let c = String(crn).trim();
+                    return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
+                });
+                if (hasCapacityIssue) issues.push('تجاوز السعة في إحدى الشعب');
+
+                // 3. فحص اكتمال الخطة التدريبية (إذا كان ملف SC04 مرفقاً)
+                let planIssues = getPlanIssuesForRayat(st);
+                if (planIssues) issues.push(planIssues);
+            }
+
+            if (issues.length > 0) {
+                hasCriticalErrors = true;
+                errorsListHTML += `<li style="margin-bottom: 8px; border-bottom: 1px dashed #f5c6cb; padding-bottom: 5px;">
+                    <strong style="color: #721c24;">${st.name || st.id}:</strong> 
+                    <span style="color: #dc3545; font-weight: 600;">${issues.join('، ')}</span>
+                </li>`;
+            }
+        });
+
+        // إذا وجدت أخطاء، افتح النافذة المنبثقة للتأكيد
+        if (hasCriticalErrors) {
+            pendingRayatTrainees = targetTrainees;
+            document.getElementById('rayat-errors-list').innerHTML = `<ul style="margin:0; padding-right: 20px;">${errorsListHTML}</ul>`;
+            document.getElementById('rayat-confirm-modal').style.display = 'flex';
+            document.body.style.overflow = 'hidden';
+        } else {
+            // إذا لم توجد أخطاء، انسخ مباشرة
+            executeCopy(targetTrainees);
+        }
+    }
+
+    // دالة تنفيذ النسخ الفعلية
+    function executeCopy(targetTrainees) {
+        let textToCopy = "";
         targetTrainees.forEach(st => {
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
                 let line = st.id + '\t' + st.assignedCRNs.join('\t');
@@ -1182,9 +1240,125 @@ function savePhysicsSetting() {
             }
         });
 
-        if (textToCopy.trim() === "") { showToast('لا توجد بيانات مسندة للنسخ في الجدول المعروض!'); return; }
-        navigator.clipboard.writeText(textToCopy.trim()).then(() => { showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!'); })
-        .catch(err => { showToast('❌ حدث خطأ أثناء النسخ'); });
+        if (textToCopy.trim() === "") { 
+            showToast('لا توجد أرقام مرجعية مسندة لنسخها!'); 
+            closeRayatModal();
+            return; 
+        }
+        
+        navigator.clipboard.writeText(textToCopy.trim()).then(() => { 
+            showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!'); 
+            closeRayatModal();
+        }).catch(err => { 
+            showToast('❌ حدث خطأ أثناء النسخ'); 
+        });
+    }
+
+    // إغلاق نافذة تأكيد النسخ
+    function closeRayatModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('rayat-confirm-modal').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // المتابعة رغم الأخطاء
+    function proceedCopyToRayat() {
+        if (pendingRayatTrainees.length > 0) {
+            executeCopy(pendingRayatTrainees);
+        }
+    }
+
+    // دالة مساعدة لاكتشاف مشاكل الخطة للمتدرب (نقص/زيادة/شعب دخيلة)
+    function getPlanIssuesForRayat(st) {
+        if (!st.program || !isSc04Attached || Object.keys(dynamicSC04Plan).length === 0) return null;
+
+        const normalizeCode = (code) => {
+            if (!code) return '';
+            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+        };
+
+        let planData = null;
+        let programClean = st.program.trim();
+        
+        if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+            planData = dynamicSC04Plan[programClean];
+        } else {
+            for (let key of Object.keys(dynamicSC04Plan)) {
+                if (isProgramMatch(programClean, key)) {
+                    planData = dynamicSC04Plan[key];
+                    break;
+                }
+            }
+        }
+
+        if (!planData) return 'التخصص غير مدرج بخطة SC04';
+
+        let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0;
+        let validStudentPartsCount = 0;
+        let hasUnmapped = false;
+
+        let planCoursesList = Array.from(planData.courses);
+        let studentCoursesMap = {};
+
+        if (st.assignedCRNs) {
+            st.assignedCRNs.forEach(crn => {
+                let crnClean = String(crn).trim();
+                if (globalCRNDetails[crnClean]) {
+                    let rawCourse = globalCRNDetails[crnClean].course;
+                    let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
+                    let normCourse = normalizeCode(rawCourse);
+                    if (!studentCoursesMap[normCourse]) studentCoursesMap[normCourse] = { count: 0, types: [] };
+                    studentCoursesMap[normCourse].count++;
+                    studentCoursesMap[normCourse].types.push(typeStr);
+                }
+            });
+        }
+
+        let requiredParts = 0;
+
+        planCoursesList.forEach(planCourse => {
+            let normPlanCourse = normalizeCode(planCourse);
+            let reqForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+
+            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
+                reqForThis = 1;
+            }
+            requiredParts += reqForThis;
+
+            let assignedForThis = 0;
+            for (let studentNormCourse in studentCoursesMap) {
+                if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
+                    let stat = studentCoursesMap[studentNormCourse];
+                    if (reqForThis === 2) {
+                        let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+                        let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                        let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
+
+                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                            assignedForThis = 2;
+                        } else if (stat.count >= 2) {
+                            assignedForThis = 1; 
+                        } else {
+                            assignedForThis = stat.count;
+                        }
+                    } else {
+                        assignedForThis = stat.count;
+                    }
+                    break;
+                }
+            }
+            validStudentPartsCount += Math.min(assignedForThis, reqForThis);
+        });
+
+        if (studentPartsCount > validStudentPartsCount) hasUnmapped = true;
+
+        let planIssues = [];
+        if (validStudentPartsCount < requiredParts) planIssues.push("الجدول ناقص");
+        if (validStudentPartsCount > requiredParts) planIssues.push("مقررات زائدة عن المطلوب");
+        if (hasUnmapped) planIssues.push("توجد شعب دخيلة/مخالفة للخطة");
+
+        return planIssues.length > 0 ? planIssues.join(' و ') : null;
     }
 
     function switchPage(pageId) {
@@ -1803,7 +1977,21 @@ async function submitContactForm(e) {
         </form>
     </div>
 </div>
-
+    <div id="rayat-confirm-modal" class="modal-overlay" onclick="closeRayatModal(event)">
+        <div class="modal-box" style="max-width: 650px;" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closeRayatModal(event)">✖</button>
+            <h2 style="text-align:center; color:#dc3545; margin-top:0; border-bottom: 2px dashed #f5c6cb; padding-bottom: 10px;">⚠️ تنبيه: توجد ملاحظات على الإسناد</h2>
+            <div style="margin-bottom: 15px; font-size: 15px; color: #333; text-align: center; font-weight: bold;">
+                تم العثور على الأخطاء / الملاحظات التالية في البيانات التي تتم محاولة نسخها.<br>هل لك رغبة في المتابعة والنسخ على أي حال؟
+            </div>
+            <div id="rayat-errors-list" style="max-height: 350px; overflow-y: auto; background: #fff3cd; padding: 15px; border-radius: 8px; border: 1px solid #ffeeba; margin-bottom: 20px; font-size: 14px; text-align: right;">
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-action btn-secondary" onclick="closeRayatModal(event)" style="width: auto; padding: 10px 30px;">إلغاء الأمر</button>
+                <button class="btn-process" style="background-color: #dc3545; width: auto; padding: 10px 30px;" onclick="proceedCopyToRayat()">متابعة النسخ</button>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>

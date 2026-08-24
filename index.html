@@ -1267,7 +1267,137 @@ if (st.assignedCRNs && st.assignedCRNs.length > 0) {
             executeCopy(targetTrainees);
         }
     }
+    // دالة تنفيذ النسخ الفعلي إلى الحافظة
+    function executeCopy(targetTrainees) {
+        let textToCopy = "";
+        targetTrainees.forEach(st => {
+            if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+                let line = st.id + '\t' + st.assignedCRNs.join('\t');
+                textToCopy += line + '\n';
+            }
+        });
 
+        if (textToCopy.trim() === "") { 
+            showToast('لا توجد أرقام مرجعية مسندة لنسخها!'); 
+            closeRayatModal();
+            return; 
+        }
+        
+        navigator.clipboard.writeText(textToCopy.trim()).then(() => { 
+            showToast('✅ تم نسخ البيانات لرايات أوتو بنجاح!'); 
+            closeRayatModal();
+        }).catch(err => { 
+            showToast('❌ حدث خطأ أثناء النسخ'); 
+        });
+    }
+
+    // دالة إغلاق نافذة التأكيد
+    function closeRayatModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('rayat-confirm-modal').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // دالة المتابعة والنسخ عند ضغط زر التأكيد في النافذة
+    function proceedCopyToRayat() {
+        if (pendingRayatTrainees.length > 0) {
+            executeCopy(pendingRayatTrainees);
+        }
+    }
+
+    // دالة فحص مشاكل الخطة التدريبية للرزمة
+    function getPlanIssuesForRayat(st) {
+        if (!st.program || !isSc04Attached || Object.keys(dynamicSC04Plan).length === 0) return null;
+
+        const normalizeCode = (code) => {
+            if (!code) return '';
+            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
+        };
+
+        let planData = null;
+        let programClean = st.program.trim();
+        
+        if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+            planData = dynamicSC04Plan[programClean];
+        } else {
+            for (let key of Object.keys(dynamicSC04Plan)) {
+                if (isProgramMatch(programClean, key)) {
+                    planData = dynamicSC04Plan[key];
+                    break;
+                }
+            }
+        }
+
+        if (!planData) return 'التخصص غير مدرج بخطة SC04';
+
+        let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0;
+        let validStudentPartsCount = 0;
+        let hasUnmapped = false;
+
+        let planCoursesList = Array.from(planData.courses);
+        let studentCoursesMap = {};
+
+        if (st.assignedCRNs) {
+            st.assignedCRNs.forEach(crn => {
+                let crnClean = String(crn).trim();
+                if (globalCRNDetails[crnClean]) {
+                    let rawCourse = globalCRNDetails[crnClean].course;
+                    let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
+                    let normCourse = normalizeCode(rawCourse);
+                    if (!studentCoursesMap[normCourse]) studentCoursesMap[normCourse] = { count: 0, types: [] };
+                    studentCoursesMap[normCourse].count++;
+                    studentCoursesMap[normCourse].types.push(typeStr);
+                }
+            });
+        }
+
+        let requiredParts = 0;
+
+        planCoursesList.forEach(planCourse => {
+            let normPlanCourse = normalizeCode(planCourse);
+            let reqForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
+
+            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
+                reqForThis = 1;
+            }
+            requiredParts += reqForThis;
+
+            let assignedForThis = 0;
+            for (let studentNormCourse in studentCoursesMap) {
+                if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
+                    let stat = studentCoursesMap[studentNormCourse];
+                    if (reqForThis === 2) {
+                        let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+                        let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                        let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
+
+                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                            assignedForThis = 2;
+                        } else if (stat.count >= 2) {
+                            assignedForThis = 1; 
+                        } else {
+                            assignedForThis = stat.count;
+                        }
+                    } else {
+                        assignedForThis = stat.count;
+                    }
+                    break;
+                }
+            }
+            validStudentPartsCount += Math.min(assignedForThis, reqForThis);
+        });
+
+        if (studentPartsCount > validStudentPartsCount) hasUnmapped = true;
+
+        let planIssues = [];
+        if (validStudentPartsCount < requiredParts) planIssues.push("الجدول ناقص");
+        if (validStudentPartsCount > requiredParts) planIssues.push("مقررات زائدة عن المطلوب");
+        if (hasUnmapped) planIssues.push("توجد شعب دخيلة/مخالفة للخطة");
+
+        return planIssues.length > 0 ? planIssues.join(' و ') : null;
+    }
+    
     function switchPage(pageId) {
         document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
         document.getElementById(pageId).classList.add('active');

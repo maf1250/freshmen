@@ -1034,22 +1034,22 @@ function savePhysicsSetting() {
             if (planData && st.assignedCRNs && st.assignedCRNs.length > 0) {
                 let planCoursesList = Array.from(planData.courses);
                 
-                // --- بداية الإصلاح: تعريف وبناء بيانات studentCoursesMap ---
+               // ---  تعريف وبناء بيانات studentCoursesMap ---
                 let studentCoursesMap = {};
                 st.assignedCRNs.forEach(crn => {
                     let crnClean = String(crn).trim();
                     if (globalCRNDetails[crnClean]) {
                         let rawCourse = globalCRNDetails[crnClean].course;
+                        let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase(); // التقاط نوع الجدولة للشعبة
                         let normCourse = normalizeCode(rawCourse);
                         if (!studentCoursesMap[normCourse]) {
-                            studentCoursesMap[normCourse] = { count: 0 };
+                            studentCoursesMap[normCourse] = { count: 0, types: [] };
                         }
                         studentCoursesMap[normCourse].count++;
+                        studentCoursesMap[normCourse].types.push(typeStr);
                     }
                 });
-                // --- نهاية الإصلاح ---
 
-                // حساب الشعب "الصحيحة" التي تطابق الخطة فعلياً فقط
                 planCoursesList.forEach(planCourse => {
                     let normPlanCourse = normalizeCode(planCourse);
                     let requiredForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
@@ -1062,14 +1062,28 @@ function savePhysicsSetting() {
                     let assignedForThis = 0;
                     for (let studentNormCourse in studentCoursesMap) {
                         if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
-                            assignedForThis = studentCoursesMap[studentNormCourse].count;
+                            let stat = studentCoursesMap[studentNormCourse];
+                            if (requiredForThis === 2) {
+                                let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+                                let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                                let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
+                                
+                                // المقررات ذات الشقين تتطلب توفر أنواع جدولة مختلفة (نظري + عملي)
+                                if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                                    assignedForThis = 2; 
+                                } else if (stat.count >= 2) {
+                                    assignedForThis = 1; // سجل شعبتين ولكن من نفس النوع! يحسب 1 فقط ليظهر كتنبيه بنقص الجدول 
+                                } else {
+                                    assignedForThis = stat.count; 
+                                }
+                            } else {
+                                assignedForThis = stat.count;
+                            }
                             break;
                         }
                     }
                     validStudentPartsCount += Math.min(assignedForThis, requiredForThis);
-                });
-
-                if (studentPartsCount > validStudentPartsCount) {
+                });                if (studentPartsCount > validStudentPartsCount) {
                     hasUnmapped = true; 
                 }
             }
@@ -1556,20 +1570,41 @@ function parseTimeToMinutes(timeStr) {
                 fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 السعة لا تكفي:<br>${fullCrns.join('<br>')}</span>`;
             }
 
+           let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+            let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+            let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
+            
+            let isComplete = false;
+            let typeMsg = "";
+
+            if (requiredParts === 2) {
+                if (stat.partsCount >= 2) {
+                    // يجب أن يكون الشقان مختلفين
+                    if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                        isComplete = true;
+                    } else {
+                        isComplete = false;
+                        if (hasTheory) typeMsg = " (مسجل نظري مكرر - ينقص العملي)";
+                        else if (hasPrac) typeMsg = " (مسجل عملي مكرر - ينقص النظري)";
+                        else typeMsg = " (مسجل شعبتين من نفس نوع الجدولة - ينقص شق مختلف)"; 
+                    }
+                } else if (stat.partsCount === 1) {
+                    isComplete = false;
+                    if (hasTheory) typeMsg = " (ينقص العملي)";
+                    else if (hasPrac) typeMsg = " (ينقص النظري)";
+                    else typeMsg = " (ينقص شق آخر)";
+                }
+            } else {
+                isComplete = (stat.partsCount >= requiredParts);
+            }
+
             if (stat.partsCount === 0) {
                 statusBadge = `<span class="badge badge-danger">❌ غير مسجل إطلاقاً</span>`;
-            } else if (stat.partsCount === requiredParts) {
+            } else if (isComplete && stat.partsCount === requiredParts) {
                 statusBadge = `<span class="badge badge-success">✅ مكتمل (${stat.crns.join(' - ')})</span>` + fullWarning;
-            } else if (stat.partsCount > requiredParts) {
+            } else if (isComplete && stat.partsCount > requiredParts) {
                 statusBadge = `<span class="badge badge-warning" style="background:#ffeeba; color:#856404; border: 1px dashed #856404;">⬆️ زائد عن المطلوب (${stat.crns.join(' - ')})</span>` + fullWarning;
             } else {
-                let typeMsg = "";
-                if (requiredParts === 2) {
-                    let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة'));
-                    let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-                    if (hasTheory && !hasPrac) typeMsg = " (ينقص العملي)";
-                    else if (!hasTheory && hasPrac) typeMsg = " (ينقص النظري)";
-                }
                 statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
             }
 

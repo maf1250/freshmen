@@ -372,18 +372,19 @@
             </div>
         </div>
 
-        <!-- منطقة الفلترة المنسدلة -->
+       <!-- منطقة الفلترة المنسدلة -->
         <div class="filter-section">
             <div>
                 <label style="color:#006d60; font-weight:bold; margin-left:10px;">تصفية حسب التخصص:</label>
                 <select id="result-program-filter" onchange="renderResultsTable()">
                 </select>
             </div>
-            <button class="btn-copy-rayat" onclick="copyFilteredToRayat()">📋 نسخ البيانات لرايات أوتو</button>
-            <button class="btn-copy-rayat" style="background-color: #1d6f42;" onclick="exportResultsToExcel()">📥 تصدير النتائج</button>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                <button class="btn-copy-rayat" onclick="copyFilteredToRayat()">📋 نسخ البيانات لرايات أوتو</button>
+                <button class="btn-copy-rayat" style="background-color: #1d6f42;" onclick="exportResultsToExcel()">📥 تصدير النتائج</button>
+            </div>
         </div>
 
-        <!-- ملخص الرزم وحاويات الجداول -->
         <div id="packages-summary-container" style="margin-bottom: 15px;"></div>
         <div id="results-table-container" style="overflow-x: auto;"></div>
     </div>
@@ -391,7 +392,6 @@
     <div id="toast"></div>
 
 <script>
-    // متغيرات عامة
     let traineesData = [];
     let uniquePrograms = [];
     let packagesData = [];
@@ -1100,60 +1100,79 @@ function savePhysicsSetting() {
             let studentPartsCount = st.assignedCRNs ? st.assignedCRNs.length : 0; 
             let validStudentPartsCount = 0;
             let hasUnmapped = false;
+            let requiredParts = 0; // تعريف المتغير هنا ليكون متاحاً للكل
 
-            if (planData && st.assignedCRNs && st.assignedCRNs.length > 0) {
+            if (planData) {
                 let planCoursesList = Array.from(planData.courses);
                 
-               // ---  تعريف وبناء بيانات studentCoursesMap ---
+                // بناء خريطة مقررات المتدرب إذا كان عنده مقررات مسندة
                 let studentCoursesMap = {};
-                st.assignedCRNs.forEach(crn => {
-                    let crnClean = String(crn).trim();
-                    if (globalCRNDetails[crnClean]) {
-                        let rawCourse = globalCRNDetails[crnClean].course;
-                        let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase(); // التقاط نوع الجدولة للشعبة
-                        let normCourse = normalizeCode(rawCourse);
-                        if (!studentCoursesMap[normCourse]) {
-                            studentCoursesMap[normCourse] = { count: 0, types: [] };
+                if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+                    st.assignedCRNs.forEach(crn => {
+                        let crnClean = String(crn).trim();
+                        if (globalCRNDetails[crnClean]) {
+                            let rawCourse = globalCRNDetails[crnClean].course;
+                            let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase(); 
+                            let normCourse = normalizeCode(rawCourse);
+                            if (!studentCoursesMap[normCourse]) {
+                                studentCoursesMap[normCourse] = { count: 0, types: [] };
+                            }
+                            studentCoursesMap[normCourse].count++;
+                            studentCoursesMap[normCourse].types.push(typeStr);
                         }
-                        studentCoursesMap[normCourse].count++;
-                        studentCoursesMap[normCourse].types.push(typeStr);
-                    }
-                });
+                    });
+                }
 
                 planCoursesList.forEach(planCourse => {
                     let normPlanCourse = normalizeCode(planCourse);
                     let requiredForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
                     
                     let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-                    if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                        requiredForThis = 1;
-                    }
 
-                    let assignedForThis = 0;
+                    let hasTheory = false;
+                    let hasPrac = false;
+                    let distinctTypes = 0;
+                    let statCount = 0;
+
                     for (let studentNormCourse in studentCoursesMap) {
                         if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
                             let stat = studentCoursesMap[studentNormCourse];
-                            if (requiredForThis === 2) {
-                                let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
-                                let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-                                let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
-                                
-                                // المقررات ذات الشقين تتطلب توفر أنواع جدولة مختلفة (نظري + عملي)
-                                if ((hasTheory && hasPrac) || distinctTypes >= 2) {
-                                    assignedForThis = 2; 
-                                } else if (stat.count >= 2) {
-                                    assignedForThis = 1; // سجل شعبتين ولكن من نفس النوع! يحسب 1 فقط ليظهر كتنبيه بنقص الجدول 
-                                } else {
-                                    assignedForThis = stat.count; 
-                                }
-                            } else {
-                                assignedForThis = stat.count;
-                            }
+                            statCount = stat.count;
+                            hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+                            hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                            distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
                             break;
                         }
                     }
+
+                    // الذكاء الاصطناعي لاستثناء الفيزياء
+                    if (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys')) {
+                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                            requiredForThis = 2; 
+                        } else if (excludePhysics) {
+                            requiredForThis = 1;
+                        }
+                    }
+
+                    requiredParts += requiredForThis; 
+
+                    let assignedForThis = 0;
+                    if (requiredForThis === 2) {
+                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                            assignedForThis = 2; 
+                        } else if (statCount >= 2) {
+                            assignedForThis = 1; 
+                        } else {
+                            assignedForThis = statCount; 
+                        }
+                    } else {
+                        assignedForThis = statCount;
+                    }
+                    
                     validStudentPartsCount += Math.min(assignedForThis, requiredForThis);
-                });                if (studentPartsCount > validStudentPartsCount) {
+                });
+                
+                if (studentPartsCount > validStudentPartsCount) {
                     hasUnmapped = true; 
                 }
             }

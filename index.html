@@ -189,11 +189,26 @@
 .crn-tag span.remove { cursor: pointer; font-weight: bold; padding: 0 4px; background: rgba(0,0,0,0.1); border-radius: 50%; }
 .crn-tag span.remove:hover { background: rgba(0,0,0,0.3); color: #fff; }
 .crn-legend { display: flex; gap: 15px; justify-content: center; background: #fff; padding: 10px; border-radius: 8px; border: 1px dashed #cbe6e3; margin-bottom: 20px; font-size: 13px; font-weight: bold; flex-wrap: wrap;}
- /* إعدادات الطباعة للجدول الفردي والجماعي */
-  /* إعدادات الطباعة الشاملة والمحسنة */
+
+          /* إعدادات الطباعة */
 @media print {
+    /* فرض الوضع النهاري إجبارياً للطباعة */
+    :root, [data-theme="dark"] {
+        --bg-base: #ffffff !important;
+        --bg-surface: #ffffff !important;
+        --bg-elevated: #ffffff !important;
+        --bg-hover: #f1f1f1 !important;
+        --bg-inset: #ffffff !important;
+        --border: #cddbe0 !important;
+        --border-strong: #a9bec6 !important;
+        --text-primary: #000000 !important;
+        --text-secondary: #333333 !important;
+        --text-muted: #666666 !important;
+        --primary: #008e7e !important;
+    }
+    
     @page { margin: 10mm; } /* تقليل هوامش الصفحة لإعطاء مساحة أكبر للجدول */
-    body { background: white; margin: 0; padding: 0; }
+    body { background: white !important; color: black !important; margin: 0; padding: 0; }
     
     /* إخفاء الواجهة الرئيسية دائماً أثناء أي نوع من الطباعة */
     body > *:not(#schedule-modal):not(#batch-print-container) { display: none !important; }
@@ -1071,14 +1086,12 @@ function savePhysicsSetting() {
                 return; 
             }
 
-            // استخدام السعة المُدخلة من النافذة
             let packagesNeeded = Math.ceil(studentsCount / defaultCap);
             if (packagesNeeded === 0) packagesNeeded = 1;
 
             let planCourses = Array.from(planData.courses);
             let availableCrnsByCourse = {};
 
-            // تصنيف الشعب
             planCourses.forEach(planCourse => {
                 let normPlan = normalizeCode(planCourse);
                 availableCrnsByCourse[normPlan] = { theory: [], practical: [] };
@@ -1090,7 +1103,7 @@ function savePhysicsSetting() {
                     
                     if (normCourse.includes(normPlan) || normPlan.includes(normalizeCode(details.course))) {
                         let typeStr = String(details.type).toLowerCase();
-                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد')) {
+                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || || typeStr.includes('مدمج') || typeStr.includes('عن بعد')) {
                             availableCrnsByCourse[normPlan].theory.push(crn);
                         } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
                             availableCrnsByCourse[normPlan].practical.push(crn);
@@ -1101,8 +1114,10 @@ function savePhysicsSetting() {
 
             let successfulPackages = 0;
 
-            // محاولة بناء الرزم
             for (let i = 0; i < packagesNeeded; i++) {
+                let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
+                if (seatsNeeded <= 0) seatsNeeded = defaultCap;
+
                 let bestBundle = [];
                 let success = false;
                 let lastMissing = [];
@@ -1120,11 +1135,11 @@ function savePhysicsSetting() {
                             reqParts = excludePhysics ? 1 : 2;
                         }
 
-                        // دالة سحب شعبة بدون تعارض
                         const pickValidCrn = (crnList) => {
                             let shuffled = [...crnList].sort(() => 0.5 - Math.random());
                             for (let crn of shuffled) {
-                                if (tempRemaining[crn] <= 0) continue;
+                                // (التعديل الجذري): يجب أن تكفي المقاعد المتبقية لكل سعة الرزمة وليس متدرب واحد فقط
+                                if (tempRemaining[crn] < seatsNeeded) continue;
                                 let testBundle = [...currentBundle, crn];
                                 if (!checkScheduleConflicts(testBundle).hasOverlap) {
                                     return crn;
@@ -1145,7 +1160,6 @@ function savePhysicsSetting() {
                         }
                     });
 
-                    // إذا لم يكن هناك أي مقررات ناقصة، فالرزمة مكتملة تماماً
                     if (missingInAttempt.length === 0) {
                         bestBundle = currentBundle;
                         success = true;
@@ -1156,13 +1170,15 @@ function savePhysicsSetting() {
                 }
 
                 if (success) {
-                    generatedPackages.push({ prog: prog, cap: defaultCap, crns: bestBundle.join(' ') });
-                    bestBundle.forEach(c => { tempRemaining[c] -= defaultCap; }); // خصم المقاعد
+                    // (التعديل الجذري): تخصيص السعة الدقيقة للرزمة وخصمها
+                    generatedPackages.push({ prog: prog, cap: seatsNeeded, crns: bestBundle.join(' ') });
+                    bestBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; }); 
                     successfulPackages++;
                 } else {
                     let uniqueMissing = [...new Set(lastMissing)].join('، ');
-                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال الرزمة المقترحة رقم (${i+1}) لاحتمالية نفاد المقاعد أو لوجود تعارض زمني حتمي.<br>المقررات التي تسببت بالمشكلة: <span style="color:#dc3545; font-weight:bold;">${uniqueMissing}</span></div>`);
-                    break; // التوقف عن محاولة إنشاء مزيد من الرزم لهذا التخصص لأن المقاعد نفدت غالباً
+                    // (التصحيح): تم تعديل الرسالة لتكون أوضح ولا تظهر ترقيماً يسبب التباساً
+                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال رزمة إضافية لاحتمالية نفاد المقاعد (نحتاج ${seatsNeeded} مقعد) أو لوجود تعارض زمني حتمي.<br>المقررات التي تسببت بالمشكلة: <span style="color:#dc3545; font-weight:bold;">${uniqueMissing}</span></div>`);
+                    break; 
                 }
             }
 
@@ -1321,8 +1337,8 @@ function savePhysicsSetting() {
                 let sumHTML = `<div style="display:flex; gap:10px; flex-wrap:wrap;">`;
                 relevantPkgs.forEach(p => {
                     let isFull = p.currentCount >= p.maxCapacity;
-                    let color = isFull ? '#dc3545' : '#008e7e';
-                    sumHTML += `<div style="background:#fff; border:1px solid ${color}; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:bold; color:#333;">
+                   let color = isFull ? '#dc3545' : 'var(--primary)';
+                    sumHTML += `<div style="background:var(--bg-elevated); border:1px solid ${color}; padding:8px 12px; border-radius:6px; font-size:13px; font-weight:bold; color:var(--text-primary);">
                         📦 رزمة ${p.id} (${p.program}): مستخدم <span style="color:${color}">${p.currentCount}</span> من ${p.maxCapacity}
                     </div>`;
                 });
@@ -2004,30 +2020,29 @@ function parseTimeToMinutes(timeStr) {
                     let cardPixels = durationMinutes * PX_PER_MIN;
                     currentCursor = course.end;
 
-                    let borderColor = "#8dc63f"; let bgColor = "#f6fcf3"; let titleColor = "#5c8a24"; let typeEmoji = "🛠️";
-                    if (course.type.includes('نظري') || course.type.includes('محاضرة')) { borderColor = "#008e7e"; bgColor = "#eef7f6"; titleColor = "#008e7e"; typeEmoji = "📘"; }
+                      let borderColor = "#8dc63f"; let bgColor = "var(--bg-elevated)"; let titleColor = "#8dc63f"; let typeEmoji = "🛠️";
+                    if (course.type.includes('نظري') || course.type.includes('محاضرة') || course.type.includes('عن بعد') || course.type.includes('مدمج')) { borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "📘"; }
                     
                     let warningBadge = '';
-                    if (course.isConflicting) { borderColor = "#dc3545"; bgColor = "#f8d7da"; titleColor = "#dc3545"; warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">🚫</span>'; } 
-                    else if (course.isIntersecting) { borderColor = "#f39c12"; bgColor = "#fff3cd"; titleColor = "#d35400"; warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">⚠️</span>'; }
+                    if (course.isConflicting) { borderColor = "#dc3545"; titleColor = "#dc3545"; warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">🚫</span>'; } 
+                    else if (course.isIntersecting) { borderColor = "#f39c12"; titleColor = "#f39c12"; warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">⚠️</span>'; }
 
                     if (gapMinutes > 0) {
                         let gapText = gapMinutes >= 15 ? (Math.floor(gapMinutes / 60) > 0 ? Math.floor(gapMinutes / 60) + 'س ' : '') + (gapMinutes % 60 > 0 ? gapMinutes % 60 + 'د' : '') : '';
                         html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
                     }
 
-                    // إضافة المدرب والقاعة هنا 👇
                     html += `
                         <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 6px; justify-content: space-between;">
                             <strong style="color:${titleColor}; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 3px; display:flex; justify-content:space-between; align-items:center;">
                                 <div style="display:flex; align-items:center; overflow:hidden;">${warningBadge}<span title="${course.course}">${course.course}</span></div>
                                 <span>${typeEmoji}</span>
                             </strong>
-                            <div style="font-size: 9px; color: #555; margin-top: 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.instructor}">
+                            <div style="font-size: 9px; color: var(--text-secondary); margin-top: 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.instructor}">
                                 👨‍🏫 ${course.instructor}
                             </div>
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; font-size:10px; margin-top:4px;">
-                                <span style="background:#eee; padding:1px 4px; border-radius:3px;">🚪 ${course.room}</span>
+                                <span style="background:var(--bg-inset); color:var(--text-primary); padding:2px 4px; border-radius:3px;">🚪 ${course.room}</span>
                                 <span style="background:${borderColor}; color:#fff; padding:1px 4px; border-radius:3px; font-weight:bold;">${course.crn}</span>
                             </div>
                         </div>`;
@@ -2712,16 +2727,16 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
     <div id="auto-gen-modal" class="modal-overlay" onclick="closeAutoGenModal(event)">
         <div class="modal-box" style="max-width: 450px;" onclick="event.stopPropagation()">
             <button class="modal-close" onclick="closeAutoGenModal(event)">✖</button>
-            <h2 style="text-align:center; color:#f39c12; margin-top:0; border-bottom: 2px dashed #f39c12; padding-bottom: 10px;">🪄 توليد الرزم الذكية</h2>
+            <h2 style="text-align:center; color:#f39c12; margin-top:0; border-bottom: 2px dashed #f39c12; padding-bottom: 10px;">توليد الرزم الذكية</h2>
             
             <div style="font-size: 15px; color: #333; text-align: center; font-weight: bold; margin-bottom: 15px;">
                 هل أنت متأكد/ـة من رغبتك في توليد رزم تلقائية؟<br>
                 <span style="color:#dc3545;">(هذا الإجراء سيقوم بمسح الرزم الحالية)</span>
             </div>
             
-            <div class="form-group" style="text-align: right; background: #eef7f6; padding: 15px; border-radius: 8px; border: 1px solid #cbe6e3; margin-bottom: 20px;">
-                <label style="color:#006d60; font-size:14px; font-weight:bold;">نأمل تحديد السعة القصوى لكل رزمة:</label>
-                <input type="number" id="auto-gen-capacity" min="1" max="100" value="20" style="width: 100%; text-align: center; font-size: 16px; padding: 10px; font-weight: bold; border: 1px solid #008e7e; border-radius: 6px; margin-top: 5px;">
+             <div class="form-group" style="text-align: right; background: var(--bg-elevated); padding: 15px; border-radius: 8px; border: 1px solid var(--border-strong); margin-bottom: 20px;">
+                <label style="color:var(--primary); font-size:14px; font-weight:bold;">نأمل تحديد السعة القصوى لكل رزمة:</label>
+                <input type="number" id="auto-gen-capacity" min="1" max="100" value="20" style="width: 100%; text-align: center; font-size: 16px; padding: 10px; font-weight: bold; border: 1px solid var(--border); border-radius: 6px; margin-top: 5px; background: var(--bg-inset); color: var(--text-primary);">
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: center;">

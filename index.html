@@ -324,6 +324,7 @@
                     <div class="settings-row">
                         <div><label>عمود الرقم المرجعي</label><input type="text" id="col_ss01_crn" value="الرقم المرجعي"></div>
                         <div><label>عمود المقرر</label><input type="text" id="col_ss01_course" value="المقرر"></div>
+                        <div><label>عمود اسم المقرر</label><input type="text" id="col_ss01_course_name" value="اسم المقرر"></div>
                         <div><label>عمود الساعات المعتمدة</label><input type="text" id="col_ss01_hours" value="الساعات المعتمدة"></div>
                         <div><label>عمود المقاعد المتبقية</label><input type="text" id="col_ss01_remaining" value="متبقي"></div>
                          <div><label>عمود المدرب</label><input type="text" id="col_ss01_instructor" value="اسم المدرب Primary"></div>
@@ -568,6 +569,7 @@
                 const colCrn = document.getElementById('col_ss01_crn').value.trim();
                 const colCourse = document.getElementById('col_ss01_course').value.trim();
                 const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
+                const colCourseName = document.getElementById('col_ss01_course_name') ? document.getElementById('col_ss01_course_name').value.trim() : 'اسم المقرر';
                 const colRem = document.getElementById('col_ss01_remaining') ? document.getElementById('col_ss01_remaining').value.trim() : 'متبقي';
                 const colInstructor = document.getElementById('col_ss01_instructor') ? document.getElementById('col_ss01_instructor').value.trim() : 'اسم المدرب';
                 const colRoom = document.getElementById('col_ss01_room') ? document.getElementById('col_ss01_room').value.trim() : 'قاعة';
@@ -587,7 +589,7 @@
 
                             globalCRNDetails[crn] = {
                                 course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
-                                name: row['اسم المقرر'] || '',
+                                name: row[colCourseName] || row['اسم المقرر'] || '',
                                 type: row['نوع الشعبة'] || row['نوع الجدولة'] || '', 
                                 hours: currentHours, 
                                 initialRemaining: isNaN(remCap) ? 0 : remCap, 
@@ -2295,10 +2297,11 @@ function parseTimeToMinutes(timeStr) {
             });
         }
 
-        let html = `<table class="schedule-h-table">
+       let html = `<table class="schedule-h-table">
                         <thead>
                             <tr>
-                                <th>مقررات المستوى الأول</th>
+                                <th>رمز المقرر</th>
+                                <th>اسم المقرر</th>
                                 <th>الشعب المطلوبة</th>
                                 <th>الشعب المسندة</th>
                                 <th>حالة المقرر</th>
@@ -2377,8 +2380,28 @@ function parseTimeToMinutes(timeStr) {
                 statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
             }
 
+           // --- محاولة استخراج اسم المقرر ---
+            let courseNameToShow = "غير متوفر";
+            if (stat.crns.length > 0) {
+                // إذا كان مسجلاً، اسحب الاسم من تفاصيل الشعبة المسندة
+                courseNameToShow = globalCRNDetails[stat.crns[0]].name;
+            } else {
+                // إذا لم يكن مسجلاً، ابحث عنه في كل شعب الكلية
+                let normPlanCourseForSearch = normalizeCode(planCourse);
+                for (let crnKey in globalCRNDetails) {
+                    let gCode = normalizeCode(globalCRNDetails[crnKey].course);
+                    if (normPlanCourseForSearch.includes(gCode) || gCode.includes(normPlanCourseForSearch)) {
+                        courseNameToShow = globalCRNDetails[crnKey].name;
+                        break;
+                    }
+                }
+            }
+            if (!courseNameToShow || courseNameToShow.trim() === "") courseNameToShow = "غير متوفر";
+            // ------------------------------------
+
             html += `<tr>
                         <td><strong>${planCourse}</strong></td>
+                        <td style="font-weight: 600; color: #006d60;">${courseNameToShow}</td>
                         <td>${requiredParts}</td>
                         <td>${stat.partsCount}</td>
                         <td>${statusBadge}</td>

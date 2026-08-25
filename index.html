@@ -816,7 +816,7 @@ function handleCRNInput(event, pkgId) {
 
     // دالة حذف الرزمة مع إعادة الترتيب
     function deletePackage(pkgIdToRemove) {
-        if (!confirm(`هل أنت متأكد من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
+        if (!confirm(`هل أنت متأكد/ـة من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
 
         let num = parseInt(document.getElementById('num-packages').value) || 1;
         let currentPackages = [];

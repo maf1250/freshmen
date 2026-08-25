@@ -369,6 +369,13 @@
     <!-- ==================== الصفحة الثانية: إعداد الرزم ==================== -->
     <div id="page-2" class="page">
         <h2 class="page-title">إعداد وتخصيص الرزم التدريبية</h2>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn-action btn-secondary" onclick="switchPage('page-1')" style="flex: 1;">رجوع</button>
+            <button class="btn-process" onclick="processAssignments()" style="flex: 3;">
+                <span class="loader" id="loader-2"></span>
+                <span id="btnText-2">تنفيذ الإسناد وعرض النتائج</span>
+            </button>
+        </div>
         <!-- خيار استثناء الفيزياء -->
         <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">

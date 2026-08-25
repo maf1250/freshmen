@@ -324,6 +324,7 @@
                 </select>
             </div>
             <button class="btn-copy-rayat" onclick="copyFilteredToRayat()">📋 نسخ البيانات لرايات أوتو</button>
+            <button class="btn-copy-rayat" style="background-color: #1d6f42;" onclick="exportResultsToExcel()">📥 تصدير النتائج</button>
         </div>
 
         <!-- ملخص الرزم وحاويات الجداول -->
@@ -1949,6 +1950,30 @@ async function submitContactForm(e) {
     }
 }
 
+    function exportResultsToExcel() {
+    if (traineesData.length === 0) {
+        showToast("لا توجد بيانات لتصديرها");
+        return;
+    }
+
+    // تجهيز البيانات للتصدير
+    let exportData = traineesData.map(st => ({
+        "رقم المتدرب": st.id,
+        "اسم المتدرب": st.name,
+        "التخصص": st.program,
+        "رقم الرزمة المسندة": st.assignedPackage ? `رزمة ${st.assignedPackage}` : "غير مسند",
+        "الأرقام المرجعية (CRNs)": st.assignedCRNs ? st.assignedCRNs.join(" - ") : "لا يوجد",
+        "حالة التعارض الزمني": (st.assignedCRNs && checkScheduleConflicts(st.assignedCRNs).hasOverlap) ? "يوجد تعارض" : "سليم"
+    }));
+
+    // إنشاء ملف الإكسل
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "نتائج الإسناد");
+    
+    // تحميل الملف
+    XLSX.writeFile(workbook, "نتائج_الإسناد_الآلي.xlsx");
+}
 </script>
 
     <!-- نافذة عرض الجدول العرضي -->

@@ -1122,73 +1122,80 @@ function savePhysicsSetting() {
                     }
                 }
             });
-
-            let successfulPackages = 0;
+let successfulPackages = 0;
 
             for (let i = 0; i < packagesNeeded; i++) {
                 let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
                 if (seatsNeeded <= 0) seatsNeeded = defaultCap;
 
-                let bestBundle = [];
-                let success = false;
-                let lastMissing = [];
+                let requiredPicks = [];
+                let missingGlobally = [];
 
-                for (let attempt = 0; attempt < 20; attempt++) {
-                    let currentBundle = [];
-                    let missingInAttempt = [];
-
-                    planCourses.forEach(planCourse => {
-                        let normPlan = normalizeCode(planCourse);
-                        let pool = availableCrnsByCourse[normPlan];
-                        
-                        let reqParts = window.globalCourseRequirements[normPlan] || 1;
-                        if (normPlan.includes('فيزي') || normPlan.includes('فيزياء') || normPlan.includes('phys')) {
-                            reqParts = excludePhysics ? 1 : 2;
-                        }
-
-                        const pickValidCrn = (crnList) => {
-                            let shuffled = [...crnList].sort(() => 0.5 - Math.random());
-                            for (let crn of shuffled) {
-                                // (التعديل الجذري): يجب أن تكفي المقاعد المتبقية لكل سعة الرزمة وليس متدرب واحد فقط
-                                if (tempRemaining[crn] < seatsNeeded) continue;
-                                let testBundle = [...currentBundle, crn];
-                                if (!checkScheduleConflicts(testBundle).hasOverlap) {
-                                    return crn;
-                                }
-                            }
-                            return null;
-                        };
-
-                        if (reqParts === 2) {
-                            let tCrn = pickValidCrn(pool.theory);
-                            if (tCrn) currentBundle.push(tCrn); else missingInAttempt.push(`${planCourse} (نظري)`);
-                            
-                            let pCrn = pickValidCrn(pool.practical);
-                            if (pCrn) currentBundle.push(pCrn); else missingInAttempt.push(`${planCourse} (عملي)`);
-                        } else {
-                            let crn = pickValidCrn([...pool.theory, ...pool.practical]);
-                            if (crn) currentBundle.push(crn); else missingInAttempt.push(planCourse);
-                        }
-                    });
-
-                    if (missingInAttempt.length === 0) {
-                        bestBundle = currentBundle;
-                        success = true;
-                        break; 
-                    } else {
-                        lastMissing = missingInAttempt;
+                planCourses.forEach(planCourse => {
+                    let normPlan = normalizeCode(planCourse);
+                    let pool = availableCrnsByCourse[normPlan];
+                    
+                    let reqParts = window.globalCourseRequirements[normPlan] || 1;
+                    if (normPlan.includes('فيزي') || normPlan.includes('فيزياء') || normPlan.includes('phys')) {
+                        reqParts = excludePhysics ? 1 : 2;
                     }
+
+                    const getValidOptions = (crnList) => {
+                        return crnList
+                            .filter(crn => tempRemaining[crn] >= seatsNeeded)
+                            .sort((a, b) => tempRemaining[b] - tempRemaining[a]); // ترتيب ثابت لا عشوائي
+                    };
+
+                    if (reqParts === 2) {
+                        let tOptions = getValidOptions(pool.theory);
+                        if (tOptions.length === 0) missingGlobally.push(`${planCourse} (نظري)`);
+                        else requiredPicks.push({ name: `${planCourse} (نظري)`, options: tOptions });
+
+                        let pOptions = getValidOptions(pool.practical);
+                        if (pOptions.length === 0) missingGlobally.push(`${planCourse} (عملي)`);
+                        else requiredPicks.push({ name: `${planCourse} (عملي)`, options: pOptions });
+                    } else {
+                        let options = getValidOptions([...pool.theory, ...pool.practical]);
+                        if (options.length === 0) missingGlobally.push(planCourse);
+                        else requiredPicks.push({ name: planCourse, options: options });
+                    }
+                });
+
+                if (missingGlobally.length > 0) {
+                    let uniqueMissing = [...new Set(missingGlobally)].join('، ');
+                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال رزمة إضافية لنفاد المقاعد (نحتاج ${seatsNeeded} مقعد).<br>المقررات التي تسببت بالمشكلة: <span style="color:#dc3545; font-weight:bold;">${uniqueMissing}</span></div>`);
+                    break;
                 }
 
-                if (success) {
-                    // (التعديل الجذري): تخصيص السعة الدقيقة للرزمة وخصمها
+                let bestBundle = null;
+                let lastConflictMissing = null;
+
+                const findValidBundle = (pickIndex, currentBundle) => {
+                    if (pickIndex === requiredPicks.length) return currentBundle; // اكتملت الرزمة بنجاح بدون تعارض
+
+                    let currentPick = requiredPicks[pickIndex];
+                    for (let crn of currentPick.options) {
+                        let testBundle = [...currentBundle, crn];
+                        if (!checkScheduleConflicts(testBundle).hasOverlap) { // إذا لم يوجد تعارض
+                            let result = findValidBundle(pickIndex + 1, testBundle); // جرب المستوى التالي
+                            if (result) return result;
+                        } else {
+                            lastConflictMissing = currentPick.name;
+                        }
+                    }
+                    return null; // تراجع وبحث عن خيار آخر
+                };
+
+                requiredPicks.sort((a, b) => a.options.length - b.options.length);
+
+                bestBundle = findValidBundle(0, []);
+
+                if (bestBundle) {
                     generatedPackages.push({ prog: prog, cap: seatsNeeded, crns: bestBundle.join(' ') });
                     bestBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; }); 
                     successfulPackages++;
                 } else {
-                    let uniqueMissing = [...new Set(lastMissing)].join('، ');
-                    // (التصحيح): تم تعديل الرسالة لتكون أوضح ولا تظهر ترقيماً يسبب التباساً
-                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال رزمة إضافية لاحتمالية نفاد المقاعد (نحتاج ${seatsNeeded} مقعد) أو لوجود تعارض زمني حتمي.<br>المقررات التي تسببت بالمشكلة: <span style="color:#dc3545; font-weight:bold;">${uniqueMissing}</span></div>`);
+                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال الرزمة بسبب وجود تعارض زمني حتمي بين الشعب المتاحة.<br>تعثر عند: <span style="color:#dc3545; font-weight:bold;">${lastConflictMissing || 'غير محدد'}</span></div>`);
                     break; 
                 }
             }

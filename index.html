@@ -562,7 +562,7 @@
             
             rawSP15.forEach(row => {
                 let id = String(row[colId]).trim();
-                let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
+                let name = row[colName] || row['الاسم'] || row['الاسم'] || row['إسم المتدرب'] || row['Name'] || '';
                 let prog = row[colProgram];
                 
                 // التحقق من وجود الرقم وعدم تكراره
@@ -2103,8 +2103,8 @@ function changeTraineePackage(traineeId, newPkgId) {
             });
 
             worksheet.columns = [
-                { header: "رقم المتدرب", key: "id", width: 15 },
-                { header: "اسم المتدرب", key: "name", width: 35 },
+                { header: "الرقم", key: "id", width: 15 },
+                { header: "الاسم", key: "name", width: 35 },
                 { header: "التخصص", key: "program", width: 25 },
                 { header: "رقم الرزمة", key: "package", width: 15 },
                 { header: "الأرقام المرجعية (CRNs)", key: "crns", width: 35 },

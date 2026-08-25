@@ -1125,7 +1125,7 @@ function savePhysicsSetting() {
 let successfulPackages = 0;
 
             for (let i = 0; i < packagesNeeded; i++) {
-                let seatsNeeded = defaultCap;
+                let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
                 if (seatsNeeded <= 0) seatsNeeded = defaultCap;
 
                 let requiredPicks = [];

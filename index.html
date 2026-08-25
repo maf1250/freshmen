@@ -1296,7 +1296,7 @@ let successfulPackages = 0;
 
          let isEvenDistribution = document.getElementById('even-distribution').checked;
 
-        traineesData.forEach(trainee => {
+       traineesData.forEach(trainee => {
             let availablePkgs = packagesData.filter(p => p.program === trainee.program);
             
             // تطبيق خوارزمية التوزيع العادل (ترتيب الرزم حسب الأقل عدداً)
@@ -1305,21 +1305,31 @@ let successfulPackages = 0;
             }
 
             for (let pkg of availablePkgs) {
-                if (pkg.currentCount < pkg.maxCapacity) {
-                    pkg.currentCount++;
-                    trainee.assignedPackage = pkg.id;
-                    trainee.assignedCRNs = pkg.crns;
-                    
-                    // خصم المقاعد من الشعب المسندة
-                    pkg.crns.forEach(crn => {
-                        let cleanCrn = crn.trim();
-                        if (globalCRNDetails[cleanCrn]) {
-                            globalCRNDetails[cleanCrn].currentRemaining--;
-                        }
-                    });
-                    
-                    break;
+                if (pkg.currentCount >= pkg.maxCapacity) continue;
+
+                let hasEnoughSeatsInCRNs = true;
+                for (let crn of pkg.crns) {
+                    let cleanCrn = crn.trim();
+                    if (globalCRNDetails[cleanCrn] && globalCRNDetails[cleanCrn].currentRemaining <= 0) {
+                        hasEnoughSeatsInCRNs = false;
+                        break; 
+                    }
                 }
+
+                if (!hasEnoughSeatsInCRNs) continue; 
+
+                pkg.currentCount++;
+                trainee.assignedPackage = pkg.id;
+                trainee.assignedCRNs = pkg.crns;
+                
+                pkg.crns.forEach(crn => {
+                    let cleanCrn = crn.trim();
+                    if (globalCRNDetails[cleanCrn]) {
+                        globalCRNDetails[cleanCrn].currentRemaining--;
+                    }
+                });
+                
+                break; // تم الإسناد بنجاح، انتقل للمتدرب التالي
             }
         });
 

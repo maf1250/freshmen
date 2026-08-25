@@ -761,8 +761,11 @@ function handleCRNInput(event, pkgId) {
         for (let i = 1; i <= num; i++) {
             let card = document.createElement('div');
             card.className = 'package-card';
-            card.innerHTML = `
-                <h3>رزمة رقم ${i}</h3>
+           card.innerHTML = `
+                <h3>
+                    <span>📦 رزمة رقم ${i}</span>
+                    <button onclick="deletePackage(${i})" title="حذف هذه الرزمة" style="background: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;" onmouseover="this.style.background='#dc3545'; this.style.color='#fff';" onmouseout="this.style.background='rgba(220, 53, 69, 0.1)'; this.style.color='#dc3545';">✖</button>
+                </h3>
                   <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>التخصص المستهدف:</label>
@@ -811,6 +814,48 @@ function handleCRNInput(event, pkgId) {
         savePackagesToLocal();
     }
 
+    // دالة حذف الرزمة مع إعادة الترتيب
+    function deletePackage(pkgIdToRemove) {
+        if (!confirm(`هل أنت متأكد من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
+
+        let num = parseInt(document.getElementById('num-packages').value) || 1;
+        let currentPackages = [];
+        
+        for (let i = 1; i <= num; i++) {
+            let progEl = document.getElementById(`pkg-program-${i}`);
+            let capEl = document.getElementById(`pkg-capacity-${i}`);
+            let crnsEl = document.getElementById(`pkg-crns-${i}`);
+            
+            if (progEl && capEl && crnsEl) {
+                currentPackages.push({
+                    prog: progEl.value,
+                    cap: capEl.value,
+                    crns: crnsEl.value
+                });
+            }
+        }
+        
+        currentPackages.splice(pkgIdToRemove - 1, 1);
+        
+        if (currentPackages.length === 0) {
+            currentPackages.push({ prog: "", cap: "20", crns: "" });
+        }
+        
+        currentPackages.forEach((pkg, index) => {
+            pkg.id = index + 1;
+        });
+        
+        let newNum = currentPackages.length;
+        document.getElementById('num-packages').value = newNum;
+        localStorage.setItem('numPackages', newNum);
+        
+        localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
+        
+        loadPackagesFromLocal();
+        showToast("🗑️ تم حذف الرزمة بنجاح");
+        saveSessionState(); // حفظ الجلسة لضمان عدم ضياع التعديل
+    }
+    
     function savePackagesToLocal() {
         const num = parseInt(document.getElementById('num-packages').value) || 1;
         let pkgs = [];
@@ -1007,7 +1052,13 @@ function savePhysicsSetting() {
             let pkgOptions = `<option value="">-- غير مسند --</option>`;
             availablePkgs.forEach(p => {
                 let isSelected = (st.assignedPackage == p.id) ? "selected" : "";
-                pkgOptions += `<option value="${p.id}" ${isSelected}>رزمة ${p.id}</option>`;
+                let isFull = p.currentCount >= p.maxCapacity;
+                
+                if (isFull && !isSelected) {
+                    pkgOptions += `<option value="${p.id}" disabled style="color: #dc3545;">رزمة ${p.id} (ممتلئة)</option>`;
+                } else {
+                    pkgOptions += `<option value="${p.id}" ${isSelected}>رزمة ${p.id}</option>`;
+                }
             });
 
             let pkgText = `<select onchange="changeTraineePackage('${st.id}', this.value)" style="padding: 5px; border-radius: 4px; border: 1px solid #008e7e; font-family: inherit; font-weight: bold; outline: none; cursor:pointer;">
@@ -2059,10 +2110,16 @@ function changeTraineePackage(traineeId, newPkgId) {
         }
     }
 
-    // 2. خصم المقاعد للرزمة الجديدة (إن اختار رزمة)
+   // 2. خصم المقاعد للرزمة الجديدة (إن اختار رزمة)
     if (newPkgId && newPkgId !== "") {
         let newPkg = packagesData.find(p => p.id == parseInt(newPkgId));
         if (newPkg) {
+            if (newPkg.currentCount >= newPkg.maxCapacity) {
+                showToast('❌ عذراً، هذه الرزمة ممتلئة ولا يمكن الإسناد إليها!');
+                renderResultsTable(); 
+                return;
+            }
+            
             newPkg.currentCount++;
             trainee.assignedPackage = newPkg.id;
             trainee.assignedCRNs = [...newPkg.crns]; // نسخ أرقام الرزمة الجديدة للمتدرب

@@ -189,21 +189,32 @@
 .crn-tag span.remove { cursor: pointer; font-weight: bold; padding: 0 4px; background: rgba(0,0,0,0.1); border-radius: 50%; }
 .crn-tag span.remove:hover { background: rgba(0,0,0,0.3); color: #fff; }
 .crn-legend { display: flex; gap: 15px; justify-content: center; background: #fff; padding: 10px; border-radius: 8px; border: 1px dashed #cbe6e3; margin-bottom: 20px; font-size: 13px; font-weight: bold; flex-wrap: wrap;}
-
-        /* إعدادات الطباعة للجدول الفردي */
+ /* إعدادات الطباعة للجدول الفردي والجماعي */
 @media print {
     body { background: white; margin: 0; padding: 0; }
-    /* إخفاء كل محتويات الصفحة ما عدا النافذة المنبثقة */
-    body > *:not(#schedule-modal) { display: none !important; }
     
+    /* إخفاء النافذة إذا كنا في وضع الطباعة الجماعية */
+    body.is-batch-printing #schedule-modal { display: none !important; }
+    
+    /* إخفاء كل محتويات الصفحة العادية أثناء الطباعة */
+    body > *:not(#schedule-modal):not(#batch-print-container) { display: none !important; }
+    
+    /* ستايل الطباعة الفردية */
     #schedule-modal { display: block !important; position: static !important; background: white !important; padding: 0 !important; backdrop-filter: none !important; }
     .modal-box { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; max-height: none !important; overflow: visible !important; padding: 0 !important; }
-    
-    /* إخفاء أزرار الإغلاق والطباعة عند الطباعة الفعيلة */
     .modal-close, .print-btn-modal { display: none !important; }
     
-    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    /* ستايل الطباعة الجماعية */
+    #batch-print-container { display: block !important; width: 100%; }
+    .batch-print-page { page-break-after: always; padding: 15px; padding-top: 30px;}
+    .batch-print-page:last-child { page-break-after: auto; }
+    
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 }
+
+/* إخفاء حاوية الطباعة الجماعية في العرض العادي */
+#batch-print-container { display: none; }
+        
         /* متغيرات الألوان */
         @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
         :root {
@@ -341,12 +352,22 @@
             <span>🟠 مقرر في مستوى أعلى</span>
             <span>🔴 غير موجود بجدول الوحدة</span>
         </div>
-        <div class="packages-header">
-            <div>
-                <strong>نأمل تحديد عدد الرزم المطلوب إنشاؤها:</strong>
+        <div style="background: #eef7f6; border: 1px solid #cbe6e3; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #006d60; cursor: pointer;">
+                <input type="checkbox" id="even-distribution" checked style="width: 18px; height: 18px; cursor: pointer;">
+                تفعيل التوزيع العادل للمتدربين
+            </label>
+        </div>
+
+        <div class="packages-header" style="flex-wrap: wrap; gap: 15px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <strong>عدد الرزم (للإنشاء اليدوي):</strong>
+                <input type="number" id="num-packages" min="1" max="50" value="1" onchange="generatePackageCards()">
             </div>
             <div>
-                <input type="number" id="num-packages" min="1" max="50" value="1" onchange="generatePackageCards()">
+                <button onclick="autoGeneratePackages()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#d68910'" onmouseout="this.style.backgroundColor='#f39c12'">
+                 توليد رزم ذكية تلقائيًا
+                </button>
             </div>
         </div>
 
@@ -382,6 +403,7 @@
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button class="btn-copy-rayat" onclick="copyFilteredToRayat()">📋 نسخ البيانات لرايات أوتو</button>
                 <button class="btn-copy-rayat" style="background-color: #1d6f42;" onclick="exportResultsToExcel()">📥 تصدير النتائج</button>
+                <button class="btn-copy-rayat" style="background-color: #34495e;" onclick="batchPrintSchedules()" title="يقوم بطباعة جداول المتدربين المسندين في هذا التخصص، كل متدرب في صفحة">🖨️ طباعة الجداول (جماعي)</button>
             </div>
         </div>
 
@@ -427,6 +449,45 @@
         });
     }
 
+    // --- دالة التحقق من صحة الملفات المرفقة ---
+    async function validateFileHeaders(fileInput, requiredKeywords, fileAlias) {
+        const file = fileInput.files[0];
+        if (!file) return;
+        try {
+            let data = await readExcelFile(file);
+            if (data.length === 0) throw new Error("الملف فارغ");
+            
+            // جمع عناوين الأعمدة من أول صف
+            let headers = Object.keys(data[0]).join(' ');
+            
+            // التحقق هل يحتوي على إحدى الكلمات الدلالية
+            let isValid = requiredKeywords.some(keyword => headers.includes(keyword));
+            
+            if (!isValid) {
+                showToast(`❌ الملف المرفق في خانة ${fileAlias} غير صحيح! يرجى التأكد.`);
+                fileInput.value = ''; // تفريغ الحقل لمنع استمرار الخطأ
+            } else {
+                showToast(`✅ تم التحقق من ملف ${fileAlias}`);
+            }
+        } catch(e) {
+            showToast(`❌ خطأ في قراءة ملف ${fileAlias}`);
+            fileInput.value = '';
+        }
+    }
+
+    // ربط الحقول بالدالة بمجرد تحميل الصفحة
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById('sp15File').addEventListener('change', function() { 
+            validateFileHeaders(this, ['المتدرب', 'الاسم', 'تخصص'], 'قائمة المستجدين (SP15)'); 
+        });
+        document.getElementById('ss01File').addEventListener('change', function() { 
+            validateFileHeaders(this, ['مرجعي', 'CRN', 'وقت', 'قاعة', 'مبنى'], 'الجدول (SS01)'); 
+        });
+        document.getElementById('sc04File').addEventListener('change', function() {
+            if(this.files.length > 0) validateFileHeaders(this, ['تخصص', 'فصل', 'مقرر', 'نظري'], 'الخطة (SC04)');
+        });
+    });
+    
     // الانتقال للصفحة الثانية
    async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
@@ -461,7 +522,10 @@
                         let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
                         let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
                         
-                        if (!globalCRNDetails[crn]) {
+                          if (!globalCRNDetails[crn]) {
+                            let instructorName = row['اسم المدرب Primary'] || row['المدرب'] || row['المدرس'] || 'غير محدد';
+                            let roomNum = row['القاعة'] || row['مبنى'] || row['غرفة'] || '-';
+
                             globalCRNDetails[crn] = {
                                 course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
                                 name: row['اسم المقرر'] || '',
@@ -469,6 +533,8 @@
                                 hours: currentHours, 
                                 initialRemaining: isNaN(remCap) ? 0 : remCap, 
                                 currentRemaining: isNaN(remCap) ? 0 : remCap,
+                                instructor: instructorName, // إضافة المدرب
+                                room: roomNum, // إضافة القاعة
                                 parts: [] 
                             };
                         } else {
@@ -910,6 +976,143 @@ function savePhysicsSetting() {
         }
     }
 
+    // ---------------- خوارزمية التوليد التلقائي الذكي ----------------
+    function autoGeneratePackages() {
+        if (!isSc04Attached || Object.keys(dynamicSC04Plan).length === 0) {
+            showToast("⚠️ يجب إرفاق تقرير الخطط (SC04) لتعمل ميزة التوليد التلقائي");
+            return;
+        }
+
+        if (!confirm("هل أنت متأكد/ـة من رغبتك في توليد رزم تلقائية؟ (هذا الإجراء سيقوم بمسح الرزم الحالية وإنشاء رزم جديدة مقترحة بناءً على الخطة والجدول)")) {
+            return;
+        }
+
+        let generatedPackages = [];
+        let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
+
+        let tempRemaining = {};
+        for (let crn in globalCRNDetails) {
+            tempRemaining[crn] = globalCRNDetails[crn].initialRemaining;
+        }
+
+        const normalizeCode = (code) => {
+            if (!code) return '';
+            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
+        };
+
+        uniquePrograms.forEach(prog => {
+            let studentsCount = traineesData.filter(t => t.program === prog).length;
+            if (studentsCount === 0) return;
+
+            let planData = dynamicSC04Plan[prog];
+            if (!planData) {
+                for (let key in dynamicSC04Plan) {
+                    if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
+                }
+            }
+            if (!planData) return; // لا توجد خطة لهذا التخصص
+
+            // السعة الافتراضية للرزمة
+            const defaultCap = 20;
+            let packagesNeeded = Math.ceil(studentsCount / defaultCap);
+            if (packagesNeeded === 0) packagesNeeded = 1;
+
+            // تصنيف الشعب المتاحة حسب مقررات الخطة
+            let planCourses = Array.from(planData.courses);
+            let availableCrnsByCourse = {};
+
+            planCourses.forEach(planCourse => {
+                let normPlan = normalizeCode(planCourse);
+                availableCrnsByCourse[normPlan] = { theory: [], practical: [] };
+
+                for (let crn in globalCRNDetails) {
+                    if (tempRemaining[crn] <= 0) continue;
+                    let details = globalCRNDetails[crn];
+                    let normCourse = normalizeCode(details.course + details.name);
+                    
+                    if (normCourse.includes(normPlan) || normPlan.includes(normalizeCode(details.course))) {
+                        let typeStr = String(details.type).toLowerCase();
+                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد')) {
+                            availableCrnsByCourse[normPlan].theory.push(crn);
+                        } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
+                            availableCrnsByCourse[normPlan].practical.push(crn);
+                        }
+                    }
+                }
+            });
+
+            // بناء الرزم
+            for (let i = 0; i < packagesNeeded; i++) {
+                let currentBundle = [];
+                
+                planCourses.forEach(planCourse => {
+                    let normPlan = normalizeCode(planCourse);
+                    let pool = availableCrnsByCourse[normPlan];
+                    
+                    let reqParts = window.globalCourseRequirements[normPlan] || 1;
+                    if (normPlan.includes('فيزي') || normPlan.includes('فيزياء') || normPlan.includes('phys')) {
+                        reqParts = excludePhysics ? 1 : 2;
+                    }
+
+                    // دالة مساعدة لاختيار شعبة لا تتعارض
+                    const pickValidCrn = (crnList) => {
+                        // خلط المصفوفة عشوائياً لضمان التنوع وعدم التركيز على مدرب واحد
+                        let shuffled = crnList.sort(() => 0.5 - Math.random());
+                        for (let crn of shuffled) {
+                            if (tempRemaining[crn] <= 0) continue;
+                            let testBundle = [...currentBundle, crn];
+                            if (!checkScheduleConflicts(testBundle).hasOverlap) {
+                                return crn;
+                            }
+                        }
+                        return null;
+                    };
+
+                    if (reqParts === 2) {
+                        let tCrn = pickValidCrn(pool.theory);
+                        if (tCrn) currentBundle.push(tCrn);
+                        let pCrn = pickValidCrn(pool.practical);
+                        if (pCrn) currentBundle.push(pCrn);
+                    } else {
+                        // إذا طلب شق واحد، نفضل النظري (أو المتوفر)
+                        let crn = pickValidCrn([...pool.theory, ...pool.practical]);
+                        if (crn) currentBundle.push(crn);
+                    }
+                });
+
+                if (currentBundle.length > 0) {
+                    generatedPackages.push({
+                        prog: prog,
+                        cap: defaultCap,
+                        crns: currentBundle.join(' ')
+                    });
+                    
+                    // خصم السعة لمنع استخدام نفس المقاعد للرزمة التالية
+                    currentBundle.forEach(c => { tempRemaining[c] -= defaultCap; });
+                }
+            }
+        });
+
+        if (generatedPackages.length === 0) {
+            showToast("❌ لم يتمكن النظام من توليد رزم. قد تكون الشعب ممتلئة أو لا يوجد تطابق.");
+            return;
+        }
+
+        // تحديث الواجهة بالرزم المولدة
+        document.getElementById('num-packages').value = generatedPackages.length;
+        localStorage.setItem('numPackages', generatedPackages.length);
+        
+        let formattedForStorage = generatedPackages.map((pkg, index) => ({
+            id: index + 1, prog: pkg.prog, cap: pkg.cap, crns: pkg.crns
+        }));
+        
+        localStorage.setItem('savedPackages', JSON.stringify(formattedForStorage));
+        
+        loadPackagesFromLocal(); // إعادة رسم البطاقات بالبيانات الجديدة
+        showToast(`✅ تم توليد ${generatedPackages.length} رزمة ذكية بنجاح! نأمل المراجعة قبل الإسناد.`);
+        saveSessionState();
+    }
+
     // خوارزمية التوزيع والإسناد
     function processAssignments() {
         const num = parseInt(document.getElementById('num-packages').value) || 1;
@@ -963,8 +1166,16 @@ function savePhysicsSetting() {
             t.assignedCRNs = [];
         });
 
+         let isEvenDistribution = document.getElementById('even-distribution').checked;
+
         traineesData.forEach(trainee => {
             let availablePkgs = packagesData.filter(p => p.program === trainee.program);
+            
+            // تطبيق خوارزمية التوزيع العادل (ترتيب الرزم حسب الأقل عدداً)
+            if (isEvenDistribution) {
+                availablePkgs.sort((a, b) => a.currentCount - b.currentCount);
+            }
+
             for (let pkg of availablePkgs) {
                 if (pkg.currentCount < pkg.maxCapacity) {
                     pkg.currentCount++;
@@ -1624,162 +1835,174 @@ function parseTimeToMinutes(timeStr) {
     
     return { start: Math.min(start, end), end: Math.max(start, end), text: timeStr };
 }
-    function openScheduleModal(studentName, crnsArray) {
-    if (!crnsArray || crnsArray.length === 0) return;
-    document.getElementById('modal-title').innerText = `جدول: ${studentName}`;
-    const content = document.getElementById('modal-content-area');
     
-    let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
-    let notFoundCRNs = [];
-    let earliestStartTime = 9999; // لتحديد بداية الجدول
+    // --- دالة مساعدة لتوليد كود HTML للجدول الزمني (للنافذة والطباعة) ---
+    function buildScheduleHTML(crnsArray) {
+        if (!crnsArray || crnsArray.length === 0) return "<div style='text-align:center; padding:20px;'>لا توجد مقررات مسندة.</div>";
+        
+        let daysMap = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+        let notFoundCRNs = [];
+        let earliestStartTime = 9999;
 
-    crnsArray.forEach(crn => {
-        let details = globalCRNDetails[crn.trim()];
-        if (details) {
-            details.parts.forEach(part => {
-                let dayStr = String(part.days).replace(/\s/g, '');
-                let isMapped = false;
-                
-                let timeData = parseTimeToMinutes(part.time);
-                if (timeData) {
-                    if (timeData.start < earliestStartTime) earliestStartTime = timeData.start;
-                }
+        crnsArray.forEach(crn => {
+            let details = globalCRNDetails[crn.trim()];
+            if (details) {
+                details.parts.forEach(part => {
+                    let dayStr = String(part.days).replace(/\s/g, '');
+                    let isMapped = false;
+                    let timeData = parseTimeToMinutes(part.time);
+                    if (timeData && timeData.start < earliestStartTime) earliestStartTime = timeData.start;
 
-                let courseLabel = details.type ? `${details.course}` : details.course;
-                let courseInstance = { 
-                    crn: crn.trim(), course: courseLabel, timeText: part.time, 
-                    type: details.type || '', 
-                    start: timeData ? timeData.start : 9999, 
-                    end: timeData ? timeData.end : 9999, 
-                    isConflicting: false 
-                };
+                    let courseLabel = details.type ? `${details.course}` : details.course;
+                    let courseInstance = { 
+                        crn: crn.trim(), course: courseLabel, timeText: part.time, 
+                        type: details.type || '', 
+                        start: timeData ? timeData.start : 9999, 
+                        end: timeData ? timeData.end : 9999,
+                        instructor: details.instructor || 'غير محدد',
+                        room: details.room || '-',
+                        isConflicting: false 
+                    };
 
-                // إذا فشل تحليل الوقت يتم رميه في قائمة المجهول
-                if (!timeData) {
-                    notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
-                    return;
-                }
-
-                if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
-                if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
-                
-                if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
-            });
-        } else {
-            notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
-        }
-    });
-
-    const PX_PER_MIN = 2.0;
-    let baseStartTime = earliestStartTime === 9999 ? 480 : earliestStartTime; // البداية الافتراضية 8:00 ص
-
-    let html = `<div class="schedule-grid-container">`;
-    
-    for (let day in daysMap) {
-        let classesToday = daysMap[day];
-        if (classesToday.length > 0) {
-            // ترتيب المحاضرات حسب وقت البدء
-            classesToday.sort((a, b) => a.start - b.start);
-
-           // اكتشاف التعارض والتقاطع
-            for (let i = 0; i < classesToday.length - 1; i++) {
-                for (let j = i + 1; j < classesToday.length; j++) {
-                    if (classesToday[i].end > classesToday[j].start) {
-                        classesToday[i].isConflicting = true;
-                        classesToday[j].isConflicting = true;
-                    } else if (classesToday[i].end === classesToday[j].start) {
-                        classesToday[i].isIntersecting = true;
-                        classesToday[j].isIntersecting = true;
-                    } else {
-                        break;
+                    if (!timeData) {
+                        notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+                        return;
                     }
-                }
+
+                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) { daysMap['الأحد'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) { daysMap['الإثنين'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الثلاثاء')) { daysMap['الثلاثاء'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) { daysMap['الأربعاء'].push({...courseInstance}); isMapped = true;}
+                    if (dayStr.includes('الخميس')) { daysMap['الخميس'].push({...courseInstance}); isMapped = true;}
+                    
+                    if(!isMapped) notFoundCRNs.push({crn: crn.trim(), course: details.course, time: part.time, days: part.days});
+                });
+            } else {
+                notFoundCRNs.push({ crn: crn.trim(), course: 'غير متوفر بملف SS01', time: '-', days: '-' });
             }
+        });
 
-            html += `<div class="day-time-row">
-                        <div class="day-time-label">${day}</div>
-                        <div class="day-time-courses">`;
-            
-            let currentCursor = baseStartTime;
-            
-            classesToday.forEach(course => {
-                // حساب الفراغ قبل المحاضرة
-                let gapMinutes = course.start - currentCursor;
-                if (gapMinutes < 0) gapMinutes = 0; // في حال التعارض
-                
-                let durationMinutes = course.end - course.start;
-                if (durationMinutes <= 0) durationMinutes = 50; 
-                
-                let gapPixels = gapMinutes * PX_PER_MIN;
-                let cardPixels = durationMinutes * PX_PER_MIN;
+        const PX_PER_MIN = 2.0;
+        let baseStartTime = earliestStartTime === 9999 ? 480 : earliestStartTime;
 
-                currentCursor = course.end; // تحديث المؤشر
-
-                // الألوان والستايلات الأساسية
-                let borderColor = "#8dc63f"; 
-                let bgColor = "#f6fcf3"; 
-                let titleColor = "#5c8a24";
-                let typeEmoji = "🛠️";
-
-                if (course.type.includes('نظري') || course.type.includes('محاضرة')) { 
-                    borderColor = "#008e7e"; bgColor = "#eef7f6"; titleColor = "#008e7e"; typeEmoji = "📘";
-                }
-                
-                let warningBadge = '';
-                
-                // ألوان التعارض والتقاطع
-                if (course.isConflicting) {
-                    borderColor = "#dc3545"; bgColor = "#f8d7da"; titleColor = "#dc3545";
-                    warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px; flex-shrink:0;">🚫 تعارض</span>';
-                } else if (course.isIntersecting) {
-                    borderColor = "#f39c12"; bgColor = "#fff3cd"; titleColor = "#d35400";
-                    warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px; flex-shrink:0;">⚠️ تقاطع</span>';
-                }
-
-                if (gapMinutes > 0) {
-                    let gapText = '';
-                    if (gapMinutes >= 15) {
-                        let h = Math.floor(gapMinutes / 60);
-                        let m = gapMinutes % 60;
-                        if (h > 0) gapText += h + 'س ';
-                        if (m > 0) gapText += m + 'د';
+        let html = `<div class="schedule-grid-container">`;
+        
+        for (let day in daysMap) {
+            let classesToday = daysMap[day];
+            if (classesToday.length > 0) {
+                classesToday.sort((a, b) => a.start - b.start);
+                for (let i = 0; i < classesToday.length - 1; i++) {
+                    for (let j = i + 1; j < classesToday.length; j++) {
+                        if (classesToday[i].end > classesToday[j].start) { classesToday[i].isConflicting = true; classesToday[j].isConflicting = true; } 
+                        else if (classesToday[i].end === classesToday[j].start) { classesToday[i].isIntersecting = true; classesToday[j].isIntersecting = true; } 
+                        else break;
                     }
-                    html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
                 }
 
-                html += `
-                    <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 6px; justify-content: center; gap: 4px;">
-                        <strong style="color:${titleColor}; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 3px; display:flex; justify-content:space-between; align-items:center;">
-                            <div style="display:flex; align-items:center; overflow:hidden;">
-                                ${warningBadge}
-                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${course.course}">${course.course}</span>
-                            </div>
-                            <span style="flex-shrink:0; margin-right:4px;">${typeEmoji}</span>
-                        </strong>
-                        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:4px; font-size:10.5px;">
-                            <span style="color:#555; direction:ltr; font-weight:bold; white-space:nowrap;">${course.timeText}</span>
-                            <span style="background:${borderColor}; color:#fff; padding:1px 4px; border-radius:3px; font-weight:bold;">${course.crn}</span>
-                        </div>
-                    </div>`;
-            });
-            html += `</div></div>`;
-        }
-    }
-    html += `</div>`;
+                html += `<div class="day-time-row"><div class="day-time-label">${day}</div><div class="day-time-courses">`;
+                let currentCursor = baseStartTime;
+                
+                classesToday.forEach(course => {
+                    let gapMinutes = Math.max(0, course.start - currentCursor);
+                    let durationMinutes = Math.max(10, course.end - course.start); // على الأقل 10 دقائق لضمان الرسم
+                    
+                    let gapPixels = gapMinutes * PX_PER_MIN;
+                    let cardPixels = durationMinutes * PX_PER_MIN;
+                    currentCursor = course.end;
 
-    if (notFoundCRNs.length > 0) {
-        html += `<h4 style="color:#dc3545; margin-top:15px; border-top: 1px dashed #ccc; padding-top: 15px;">مقررات لم يتم التعرف على أوقاتها أو أيامها:</h4><ul>`;
-        notFoundCRNs.forEach(c => { html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span> (${c.days})</li>`; });
-        html += `</ul>`;
+                    let borderColor = "#8dc63f"; let bgColor = "#f6fcf3"; let titleColor = "#5c8a24"; let typeEmoji = "🛠️";
+                    if (course.type.includes('نظري') || course.type.includes('محاضرة')) { borderColor = "#008e7e"; bgColor = "#eef7f6"; titleColor = "#008e7e"; typeEmoji = "📘"; }
+                    
+                    let warningBadge = '';
+                    if (course.isConflicting) { borderColor = "#dc3545"; bgColor = "#f8d7da"; titleColor = "#dc3545"; warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">🚫</span>'; } 
+                    else if (course.isIntersecting) { borderColor = "#f39c12"; bgColor = "#fff3cd"; titleColor = "#d35400"; warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">⚠️</span>'; }
+
+                    if (gapMinutes > 0) {
+                        let gapText = gapMinutes >= 15 ? (Math.floor(gapMinutes / 60) > 0 ? Math.floor(gapMinutes / 60) + 'س ' : '') + (gapMinutes % 60 > 0 ? gapMinutes % 60 + 'د' : '') : '';
+                        html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
+                    }
+
+                    // إضافة المدرب والقاعة هنا 👇
+                    html += `
+                        <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 6px; justify-content: space-between;">
+                            <strong style="color:${titleColor}; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 3px; display:flex; justify-content:space-between; align-items:center;">
+                                <div style="display:flex; align-items:center; overflow:hidden;">${warningBadge}<span title="${course.course}">${course.course}</span></div>
+                                <span>${typeEmoji}</span>
+                            </strong>
+                            <div style="font-size: 9px; color: #555; margin-top: 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.instructor}">
+                                👨‍🏫 ${course.instructor}
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; font-size:10px; margin-top:4px;">
+                                <span style="background:#eee; padding:1px 4px; border-radius:3px;">🚪 ${course.room}</span>
+                                <span style="background:${borderColor}; color:#fff; padding:1px 4px; border-radius:3px; font-weight:bold;">${course.crn}</span>
+                            </div>
+                        </div>`;
+                });
+                html += `</div></div>`;
+            }
+        }
+        html += `</div>`;
+
+        if (notFoundCRNs.length > 0) {
+            html += `<h4 style="color:#dc3545; margin-top:15px; border-top: 1px dashed #ccc; padding-top: 15px;">مقررات غير محددة الوقت/اليوم:</h4><ul style="font-size:12px;">`;
+            notFoundCRNs.forEach(c => { html += `<li><strong>${c.crn}</strong>: ${c.course} - <span dir="ltr">${c.time}</span> (${c.days})</li>`; });
+            html += `</ul>`;
+        }
+        return html;
     }
-    
-    content.innerHTML = html;
-    document.getElementById('schedule-modal').style.display = 'flex';
-    document.body.style.overflow = 'hidden';
-}
+
+    // --- دالة فتح الجدول الفردي (تم تحديثها) ---
+    function openScheduleModal(studentName, crnsArray) {
+        document.getElementById('modal-title').innerText = `جدول المتدرب: ${studentName}`;
+        document.getElementById('modal-content-area').innerHTML = buildScheduleHTML(crnsArray);
+        document.getElementById('schedule-modal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    // --- دالة الطباعة الجماعية (الجديدة كلياً) ---
+    function batchPrintSchedules() {
+        const selectedProg = document.getElementById('result-program-filter').value;
+        let targetTrainees = traineesData.filter(t => t.assignedPackage !== null && t.assignedCRNs && t.assignedCRNs.length > 0);
+
+        if (selectedProg !== 'الكل' && selectedProg !== 'غير مسند') {
+            targetTrainees = targetTrainees.filter(t => t.program === selectedProg);
+        }
+
+        if (targetTrainees.length === 0) {
+            showToast("⚠️ لا يوجد متدربين مسندين لطباعة جداولهم.");
+            return;
+        }
+
+        let container = document.getElementById('batch-print-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'batch-print-container';
+            document.body.appendChild(container);
+        }
+        
+        container.innerHTML = ''; // تفريغ الحاوية
+
+        targetTrainees.forEach(st => {
+            let page = document.createElement('div');
+            page.className = 'batch-print-page';
+            page.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #008e7e; padding-bottom:10px; margin-bottom:20px;">
+                    <h2 style="margin:0; color:#006d60;">الجدول التدريبي</h2>
+                    <div style="text-align:left; font-size:14px; font-weight:bold;">
+                        <div>الاسم: ${st.name}</div>
+                        <div>الرقم: ${st.id} | التخصص: ${st.program}</div>
+                    </div>
+                </div>
+                ${buildScheduleHTML(st.assignedCRNs)}
+            `;
+            container.appendChild(page);
+        });
+
+        document.body.classList.add('is-batch-printing');
+        window.print();
+        
+        setTimeout(() => { document.body.classList.remove('is-batch-printing'); }, 1000);
+    }
 
     function closeScheduleModal(event) {
         if (event) event.stopPropagation();

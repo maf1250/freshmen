@@ -1125,7 +1125,7 @@ function savePhysicsSetting() {
 let successfulPackages = 0;
 
             for (let i = 0; i < packagesNeeded; i++) {
-                let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
+                let seatsNeeded = defaultCap;
                 if (seatsNeeded <= 0) seatsNeeded = defaultCap;
 
                 let requiredPicks = [];
@@ -1191,7 +1191,7 @@ let successfulPackages = 0;
                 bestBundle = findValidBundle(0, []);
 
                 if (bestBundle) {
-                    generatedPackages.push({ prog: prog, cap: seatsNeeded, crns: bestBundle.join(' ') });
+                    generatedPackages.push({ prog: prog, cap: defaultCap, crns: bestBundle.join(' ') });
                     bestBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; }); 
                     successfulPackages++;
                 } else {

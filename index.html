@@ -331,10 +331,17 @@
                     </div>
                 </div>
                 <div class="inner-group">
+                    <h3>إعدادات تقرير ارتباط الشعب (SF33)</h3>
+                    <div class="settings-row">
+                        <div><label>عمود الرقم</label><input type="text" id="col_sf33_crn1" value="الرقم"></div>
+                        <div><label>عمود الشعبة المرتبطة</label><input type="text" id="col_sf33_crn2" value="الشعبة المرتبطة"></div>
+                    </div>
+                </div>
+                <div class="inner-group">
                     <h3>إعدادات الخطة التدريبية (SC04)</h3>
                     <div class="settings-row">
                         <div><label>عمود التخصص</label><input type="text" id="col_sc04_program" value="التخصص"></div>
-                        <div><label>عمود الفصل</label><input type="text" id="col_sc04_semester" value="الفصل التدريبي"></div>
+                        <div><label>عمود المستوى</label><input type="text" id="col_sc04_semester" value="الفصل التدريبي"></div>
                         <div><label>عمود المقرر</label><input type="text" id="col_sc04_course" value="المقرر"></div>
                     </div>
                 </div>
@@ -351,6 +358,11 @@
             <input type="file" id="ss01File" accept=".csv">
         </div>
 
+        <div class="upload-group">
+            <label>4. تقرير ارتباط الشعب (SF33) [اختياري لضمان ارتباط النظري بالعملي]</label>
+            <input type="file" id="sf33File" accept=".csv">
+        </div>
+        
         <div class="upload-group">
             <label>3. تقرير الخطط التدريبية (SC04) [اختياري لمقارنة الخطة]</label>
             <input type="file" id="sc04File" accept=".csv" multiple title="يمكنك تحديد أكثر من ملف بالضغط على زر Ctrl">
@@ -463,7 +475,8 @@
     let packagesData = [];
     let dynamicSC04Plan = {};
     let isSc04Attached = false;
-    let globalCRNDetails = {}; 
+    let globalCRNDetails = {};
+    let globalLinkedCRNs = {};
 
     // دوال قراءة الملفات
     function readExcelFile(file) {
@@ -595,6 +608,25 @@
                 });
             }
 
+            // معالجة ملف ارتباط الشعب SF33 (إن وُجد)
+            const sf33File = document.getElementById('sf33File').files[0];
+            globalLinkedCRNs = {};
+            if (sf33File) {
+                let rawSF33 = await readExcelFile(sf33File);
+                const colCrn1 = document.getElementById('col_sf33_crn1').value.trim();
+                const colCrn2 = document.getElementById('col_sf33_crn2').value.trim();
+
+                rawSF33.forEach(row => {
+                    let c1 = String(row[colCrn1]).trim();
+                    let c2 = String(row[colCrn2]).trim();
+                    if (c1 && c2 && c1 !== 'undefined' && c2 !== 'undefined') {
+                        if (!globalLinkedCRNs[c1]) globalLinkedCRNs[c1] = new Set();
+                        if (!globalLinkedCRNs[c2]) globalLinkedCRNs[c2] = new Set();
+                        globalLinkedCRNs[c1].add(c2);
+                        globalLinkedCRNs[c2].add(c1); // ارتباط متبادل
+                    }
+                });
+            }
             // معالجة ملفات الخطة SC04
             const sc04Input = document.getElementById('sc04File');
             dynamicSC04Plan = {};
@@ -1176,7 +1208,8 @@ let successfulPackages = 0;
                     let currentPick = requiredPicks[pickIndex];
                     for (let crn of currentPick.options) {
                         let testBundle = [...currentBundle, crn];
-                        if (!checkScheduleConflicts(testBundle).hasOverlap) { // إذا لم يوجد تعارض
+                        let linkErrors = getLinkageErrors(testBundle);
+                        if (linkErrors.length === 0 && !checkScheduleConflicts(testBundle).hasOverlap) {
                             let result = findValidBundle(pickIndex + 1, testBundle); // جرب المستوى التالي
                             if (result) return result;
                         } else {
@@ -1602,10 +1635,15 @@ let successfulPackages = 0;
 
 // فحص السعة لتنبيه الجدول الخارجي
 let capacityWarning = '';
-if (st.assignedCRNs && st.assignedCRNs.length > 0) {
-    let hasCapacityIssue = st.assignedCRNs.some(crn => {
-        let c = String(crn).trim();
-        return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
+                        let linkageErrors = getLinkageErrors(st.assignedCRNs);
+                let linkageWarning = '';
+                if (linkageErrors.length > 0) {
+                    linkageWarning = `<br><span ${clickAction} ${badgeHover} style="cursor:pointer; font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;" title="خطأ ارتباط: ${linkageErrors.join(' | ')}">🔗 خطأ ارتباط بالجدول</span>`;
+                }
+            if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+            let hasCapacityIssue = st.assignedCRNs.some(crn => {
+            let c = String(crn).trim();
+            return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
     });
     
     if (hasCapacityIssue) {
@@ -1876,6 +1914,8 @@ if (st.assignedCRNs && st.assignedCRNs.length > 0) {
         if (studentPartsCount > validStudentPartsCount) hasUnmapped = true;
 
         let planIssues = [];
+        let linkErrs = getLinkageErrors(st.assignedCRNs);
+        if (linkErrs.length > 0) planIssues.push("خطأ ارتباط شعب (النظري لا يرتبط بالعملي)");
         if (validStudentPartsCount < requiredParts) planIssues.push("الجدول ناقص");
         if (validStudentPartsCount > requiredParts) planIssues.push("مقررات زائدة عن المطلوب");
         if (hasUnmapped) planIssues.push("توجد شعب دخيلة/مخالفة للخطة");
@@ -2285,7 +2325,10 @@ function parseTimeToMinutes(timeStr) {
             if (fullCrns.length > 0) {
                 fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 السعة لا تكفي:<br>${fullCrns.join('<br>')}</span>`;
             }
-            
+            let linkErrs = getLinkageErrors(stat.crns);
+            if (linkErrs.length > 0) {
+                fullWarning += `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🔗 الشعب غير مرتبطة: ${linkErrs.join(' - ')}</span>`;
+            }
             let isComplete = false;
             let typeMsg = "";
 
@@ -2600,17 +2643,23 @@ function toggleTheme() {
     });
 })();
   
-    // دالة حفظ حالة الجلسة
+// دالة حفظ حالة الجلسة
 function saveSessionState() {
     try {
+        let linkedToSave = {};
+        for (let k in globalLinkedCRNs) {
+            linkedToSave[k] = Array.from(globalLinkedCRNs[k]);
+        }
+
         let state = {
             traineesData: traineesData,
             uniquePrograms: uniquePrograms,
             packagesData: packagesData,
             globalCRNDetails: globalCRNDetails,
-            dynamicSC04Plan: dynamicSC04Plan, // حفظ بيانات الخطة
-            isSc04Attached: isSc04Attached,   // حفظ حالة إرفاق الخطة
-            globalCourseRequirements: window.globalCourseRequirements, // حفظ متطلبات المقررات
+            dynamicSC04Plan: dynamicSC04Plan,
+            isSc04Attached: isSc04Attached,
+            globalCourseRequirements: window.globalCourseRequirements,
+            globalLinkedCRNs: linkedToSave, // حفظ الارتباطات هنا
             currentPage: document.querySelector('.page.active').id
         };
         sessionStorage.setItem('activeSession', JSON.stringify(state));
@@ -2629,17 +2678,26 @@ function restoreSessionState() {
         packagesData = state.packagesData || [];
         globalCRNDetails = state.globalCRNDetails || {};
         dynamicSC04Plan = state.dynamicSC04Plan || {}; 
+        
         for (let prog in dynamicSC04Plan) {
             if (dynamicSC04Plan[prog].courses && !Array.isArray(dynamicSC04Plan[prog].courses)) {
                 dynamicSC04Plan[prog].courses = [];
             }
         }
         
-        isSc04Attached = state.isSc04Attached || false; // استعادة حالة إرفاق الخطة
+        isSc04Attached = state.isSc04Attached || false;
         window.globalCourseRequirements = state.globalCourseRequirements || {}; 
+
+        globalLinkedCRNs = {};
+        if(state.globalLinkedCRNs) {
+            for(let k in state.globalLinkedCRNs) {
+                // إعادة تحويلها إلى Set لكي تعمل دالة الفحص بسرعة
+                globalLinkedCRNs[k] = new Set(state.globalLinkedCRNs[k]);
+            }
+        }
         
         if (state.currentPage === 'page-2') {
-            loadPackagesFromLocal(); // نكتفي باستدعاء هذه فقط لضمان عدم مسح البيانات
+            loadPackagesFromLocal(); 
             switchPage('page-2');
             showToast("🔄 تم استعادة بيانات الجلسة السابقة");
         } else if (state.currentPage === 'page-3') {
@@ -2650,8 +2708,50 @@ function restoreSessionState() {
     }
 }
 
-// تشغيل الاستعادة تلقائياً عند تحميل الصفحة
 window.addEventListener('DOMContentLoaded', restoreSessionState);
+
+            function getLinkageErrors(crnsArray) {
+        if (!crnsArray || Object.keys(globalLinkedCRNs).length === 0) return [];
+        let errors = [];
+        let courseGroups = {};
+
+        // تجميع الشعب حسب المقرر
+        crnsArray.forEach(crn => {
+            let cleanCrn = String(crn).trim();
+            if (globalCRNDetails[cleanCrn]) {
+                let normCourse = globalNormalizeCode(globalCRNDetails[cleanCrn].course);
+                if (!courseGroups[normCourse]) courseGroups[normCourse] = [];
+                courseGroups[normCourse].push(cleanCrn);
+            }
+        });
+
+        // فحص كل مقرر يحتوي على شعبتين أو أكثر
+        for (let course in courseGroups) {
+            let crns = courseGroups[course];
+            if (crns.length >= 2) {
+                for (let i = 0; i < crns.length; i++) {
+                    for (let j = i + 1; j < crns.length; j++) {
+                        let c1 = crns[i];
+                        let c2 = crns[j];
+
+                        let c1HasLinks = globalLinkedCRNs[c1] && globalLinkedCRNs[c1].size > 0;
+                        let c2HasLinks = globalLinkedCRNs[c2] && globalLinkedCRNs[c2].size > 0;
+
+                        // إذا كانت إحدى الشعبتين لها قيود ارتباط في ملف SF33
+                        if (c1HasLinks || c2HasLinks) {
+                            let isLinked = (globalLinkedCRNs[c1] && globalLinkedCRNs[c1].has(c2)) ||
+                                           (globalLinkedCRNs[c2] && globalLinkedCRNs[c2].has(c1));
+                            if (!isLinked) {
+                                errors.push(`[${c1}] غير مرتبطة بـ [${c2}]`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return [...new Set(errors)];
+    }
+            
 </script>
 
     <!-- نافذة عرض الجدول العرضي -->

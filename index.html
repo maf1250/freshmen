@@ -202,6 +202,40 @@
     
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
 }
+        /* متغيرات الألوان */
+        @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;800&display=swap');
+        :root {
+            --bg-base: #e3ecee; --bg-surface: #edf3f5; --bg-elevated: #edf3f5; --bg-hover: #e2ebed; --bg-inset: #e2ebed;
+            --border: #cddbe0; --border-strong: #a9bec6; --text-primary: #1e293b; --text-secondary: #475569; --text-muted: #64748b;
+            --primary: #008e7e; --primary-hover: #006d60; --primary-subtle: #008e7e26; --on-primary: #ffffff;
+        }
+        [data-theme="dark"] {
+            --bg-base: #14191c; --bg-surface: #1a2226; --bg-elevated: #222c31; --bg-hover: #2a363c; --bg-inset: #0e1416;
+            --border: #2c383e; --border-strong: #3a474e; --text-primary: #e8eeef; --text-secondary: #9fb0b5; --text-muted: #6d7e84;
+            --primary: #34c2b4; --primary-hover: #4ed2c5; --primary-subtle: #2bb5a824; --on-primary: #07211e;
+        }
+
+        /* تطبيق المتغيرات على عناصر الصفحة */
+        body { background-color: var(--bg-base); color: var(--text-primary); transition: background-color 0.3s, color 0.3s; }
+        .page, .modal-box { background-color: var(--bg-surface); border-color: var(--primary); }
+        h1, h2, h3, .page-title, .form-group label { color: var(--primary) !important; }
+        .upload-group, .package-card, .advanced-settings, .filter-section, .crn-legend { background: var(--bg-elevated); border-color: var(--border-strong); }
+        input, select, textarea { background-color: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); }
+        input:focus, select:focus { background-color: var(--bg-hover); border-color: var(--primary); }
+        .btn-process, .btn-action, .contact-btn, #scrollToTopBtn { background-color: var(--primary); color: var(--on-primary); }
+        .btn-process:hover, .btn-action:hover, .contact-btn:hover { background-color: var(--primary-hover); }
+        table.data-table th, .schedule-h-table th, .day-time-label { background-color: var(--primary); color: var(--on-primary); }
+        table.data-table td, .schedule-h-table td, .day-time-row { background-color: var(--bg-surface); color: var(--text-primary); border-color: var(--border); }
+        table.data-table tr:nth-child(even) td { background-color: var(--bg-hover); }
+        table.data-table tr:hover td { background-color: var(--bg-elevated); }
+        
+        /* زر تبديل الوضع الداكن */
+        .theme-toggle-btn {
+            width: 50px; height: 50px; flex-shrink: 0; background: var(--bg-elevated); border: 2px solid var(--border-strong);
+            border-radius: 50%; display: flex; justify-content: center; align-items: center; cursor: pointer;
+            transition: all 0.25s ease; color: var(--text-primary);
+        }
+        .theme-toggle-btn:hover { transform: scale(1.1); background: var(--bg-hover); }
     </style>
 </head>
 <body>
@@ -216,10 +250,12 @@
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
         </svg>
     </button>
-
+    <!-- زر تبديل الثيم -->
+    <button class="theme-toggle-btn" onclick="toggleTheme()" title="تبديل الوضع" id="theme-icon">
+        🌙
+    </button>
     <!-- 2. العنوان (سيكون في المنتصف) -->
     <h1 style="margin: 0;">إسناد جداول المستجدين (نظام الرزم)</h1>
-    
     <!-- 3. زر اليوتيوب (سيكون في اليسار) -->
     <a href="https://youtu.be/XrtpdRJeEJ8" target="_blank" class="youtube-btn" title="لمشاهدة الشرح">
         <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white">
@@ -521,12 +557,20 @@
             traineesData = [];
             let programsSet = new Set();
             
+            let rawSP15 = await readExcelFile(sp15File);
+            traineesData = [];
+            let programsSet = new Set();
+            let seenIds = new Set(); // مصفوفة لتتبع الأرقام المسجلة مسبقاً
+
             rawSP15.forEach(row => {
-                let id = row[colId];
+                let id = String(row[colId]).trim();
                 let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
                 let prog = row[colProgram];
-                if (id) {
-                    traineesData.push({ id: String(id).trim(), name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
+                
+                // التحقق من وجود الرقم وعدم تكراره
+                if (id && !seenIds.has(id)) {
+                    seenIds.add(id); // تسجيل الرقم كـ "مقروء"
+                    traineesData.push({ id: id, name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
                     if (prog) programsSet.add(prog.trim());
                 }
             });
@@ -2049,6 +2093,63 @@ function changeTraineePackage(traineeId, newPkgId) {
     // تحميل الملف
     XLSX.writeFile(workbook, "نتائج_إسناد_الرزم.xlsx");
 }
+    // دوال الوضع الداكن
+function toggleTheme() {
+    let currentTheme = document.documentElement.getAttribute("data-theme");
+    let newTheme = currentTheme === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", newTheme);
+    localStorage.setItem("theme", newTheme);
+    document.getElementById("theme-icon").innerText = newTheme === "dark" ? "☀️" : "🌙";
+}
+// تحميل تفضيل المستخدم فور فتح الصفحة
+(function loadTheme() {
+    let savedTheme = localStorage.getItem("theme") || "light";
+    document.documentElement.setAttribute("data-theme", savedTheme);
+    window.addEventListener('DOMContentLoaded', () => {
+        document.getElementById("theme-icon").innerText = savedTheme === "dark" ? "☀️" : "🌙";
+    });
+})();
+    // دالة حفظ حالة الجلسة
+function saveSessionState() {
+    try {
+        let state = {
+            traineesData: traineesData,
+            uniquePrograms: uniquePrograms,
+            packagesData: packagesData,
+            globalCRNDetails: globalCRNDetails,
+            currentPage: document.querySelector('.page.active').id
+        };
+        sessionStorage.setItem('activeSession', JSON.stringify(state));
+    } catch (e) {
+        console.warn("تعذر حفظ الجلسة (حجم البيانات كبير جداً)");
+    }
+}
+
+// دالة استعادة الجلسة
+function restoreSessionState() {
+    let saved = sessionStorage.getItem('activeSession');
+    if (saved) {
+        let state = JSON.parse(saved);
+        traineesData = state.traineesData || [];
+        uniquePrograms = state.uniquePrograms || [];
+        packagesData = state.packagesData || [];
+        globalCRNDetails = state.globalCRNDetails || {};
+        
+        if (state.currentPage === 'page-2') {
+            generatePackageCards();
+            loadPackagesFromLocal();
+            switchPage('page-2');
+            showToast("🔄 تم استعادة بيانات الجلسة السابقة");
+        } else if (state.currentPage === 'page-3') {
+            setupPage3();
+            switchPage('page-3');
+            showToast("🔄 تم استعادة نتيجة الإسناد السابقة");
+        }
+    }
+}
+
+// تشغيل الاستعادة تلقائياً عند تحميل الصفحة
+window.addEventListener('DOMContentLoaded', restoreSessionState);
 </script>
 
     <!-- نافذة عرض الجدول العرضي -->

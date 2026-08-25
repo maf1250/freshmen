@@ -1103,7 +1103,7 @@ function savePhysicsSetting() {
                     
                     if (normCourse.includes(normPlan) || normPlan.includes(normalizeCode(details.course))) {
                         let typeStr = String(details.type).toLowerCase();
-                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || || typeStr.includes('مدمج') || typeStr.includes('عن بعد')) {
+                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('مدمج') || typeStr.includes('عن بعد')) {
                             availableCrnsByCourse[normPlan].theory.push(crn);
                         } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
                             availableCrnsByCourse[normPlan].practical.push(crn);

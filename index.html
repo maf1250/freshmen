@@ -905,6 +905,7 @@ function savePhysicsSetting() {
                         crnsArray.forEach(c => addCRNTag(c, pkg.id, true)); // إعادة رسم الوسوم
                     }
                 });
+                savePackagesToLocal();
             }, 50);
         }
     }
@@ -2238,6 +2239,7 @@ function toggleTheme() {
         document.getElementById("theme-icon").innerText = savedTheme === "dark" ? "☀️" : "🌙";
     });
 })();
+  
     // دالة حفظ حالة الجلسة
 function saveSessionState() {
     try {
@@ -2246,6 +2248,9 @@ function saveSessionState() {
             uniquePrograms: uniquePrograms,
             packagesData: packagesData,
             globalCRNDetails: globalCRNDetails,
+            dynamicSC04Plan: dynamicSC04Plan, // حفظ بيانات الخطة
+            isSc04Attached: isSc04Attached,   // حفظ حالة إرفاق الخطة
+            globalCourseRequirements: window.globalCourseRequirements, // حفظ متطلبات المقررات
             currentPage: document.querySelector('.page.active').id
         };
         sessionStorage.setItem('activeSession', JSON.stringify(state));
@@ -2263,10 +2268,12 @@ function restoreSessionState() {
         uniquePrograms = state.uniquePrograms || [];
         packagesData = state.packagesData || [];
         globalCRNDetails = state.globalCRNDetails || {};
+        dynamicSC04Plan = state.dynamicSC04Plan || {}; // استعادة بيانات الخطة
+        isSc04Attached = state.isSc04Attached || false; // استعادة حالة إرفاق الخطة
+        window.globalCourseRequirements = state.globalCourseRequirements || {}; 
         
         if (state.currentPage === 'page-2') {
-            generatePackageCards();
-            loadPackagesFromLocal();
+            loadPackagesFromLocal(); // نكتفي باستدعاء هذه فقط لضمان عدم مسح البيانات
             switchPage('page-2');
             showToast("🔄 تم استعادة بيانات الجلسة السابقة");
         } else if (state.currentPage === 'page-3') {

@@ -190,27 +190,40 @@
 .crn-tag span.remove:hover { background: rgba(0,0,0,0.3); color: #fff; }
 .crn-legend { display: flex; gap: 15px; justify-content: center; background: #fff; padding: 10px; border-radius: 8px; border: 1px dashed #cbe6e3; margin-bottom: 20px; font-size: 13px; font-weight: bold; flex-wrap: wrap;}
  /* إعدادات الطباعة للجدول الفردي والجماعي */
+  /* إعدادات الطباعة الشاملة والمحسنة */
 @media print {
+    @page { margin: 10mm; } /* تقليل هوامش الصفحة لإعطاء مساحة أكبر للجدول */
     body { background: white; margin: 0; padding: 0; }
     
-    /* إخفاء النافذة إذا كنا في وضع الطباعة الجماعية */
-    body.is-batch-printing #schedule-modal { display: none !important; }
-    
-    /* إخفاء كل محتويات الصفحة العادية أثناء الطباعة */
+    /* إخفاء الواجهة الرئيسية دائماً أثناء أي نوع من الطباعة */
     body > *:not(#schedule-modal):not(#batch-print-container) { display: none !important; }
     
-    /* ستايل الطباعة الفردية */
-    #schedule-modal { display: block !important; position: static !important; background: white !important; padding: 0 !important; backdrop-filter: none !important; }
-    .modal-box { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; max-height: none !important; overflow: visible !important; padding: 0 !important; }
-    .modal-close, .print-btn-modal { display: none !important; }
+    body.is-batch-printing #schedule-modal { display: none !important; }
+    body.is-batch-printing #batch-print-container { display: block !important; width: 100%; }
     
-    /* ستايل الطباعة الجماعية */
-    #batch-print-container { display: block !important; width: 100%; }
-    .batch-print-page { page-break-after: always; padding: 15px; padding-top: 30px;}
+    .batch-print-page { 
+        page-break-after: always; /* إجبار كل متدرب في صفحة */
+        page-break-inside: avoid; /* منع انقسام الجدول بين صفحتين */
+        padding: 0; 
+        margin: 0;
+        zoom: 0.85; /* تصغير الجدول بنسبة 15% ليناسب ورقة واحدة */
+    }
     .batch-print-page:last-child { page-break-after: auto; }
+    
+  
+    body:not(.is-batch-printing) #batch-print-container { display: none !important; }
+    
+    body:not(.is-batch-printing) #schedule-modal { display: block !important; position: static !important; background: white !important; padding: 0 !important; backdrop-filter: none !important; }
+    
+    body:not(.is-batch-printing) .modal-box { width: 100% !important; max-width: 100% !important; border: none !important; box-shadow: none !important; max-height: none !important; overflow: visible !important; padding: 0 !important; zoom: 0.90; }
+    
+    .modal-close, .print-btn-modal { display: none !important; }
     
     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 }
+
+/* إخفاء حاوية الطباعة الجماعية في العرض العادي */
+#batch-print-container { display: none; }
 
 /* إخفاء حاوية الطباعة الجماعية في العرض العادي */
 #batch-print-container { display: none; }
@@ -298,6 +311,8 @@
                         <div><label>عمود المقرر</label><input type="text" id="col_ss01_course" value="المقرر"></div>
                         <div><label>عمود الساعات المعتمدة</label><input type="text" id="col_ss01_hours" value="الساعات المعتمدة"></div>
                         <div><label>عمود المقاعد المتبقية</label><input type="text" id="col_ss01_remaining" value="متبقي"></div>
+                         <div><label>عمود المدرب</label><input type="text" id="col_ss01_instructor" value="اسم المدرب Primary"></div>
+                        <div><label>عمود القاعة</label><input type="text" id="col_ss01_room" value="قاعة"></div>
                     </div>
                 </div>
                 <div class="inner-group">
@@ -352,21 +367,24 @@
             <span>🟠 مقرر في مستوى أعلى</span>
             <span>🔴 غير موجود بجدول الوحدة</span>
         </div>
-        <div style="background: #eef7f6; border: 1px solid #cbe6e3; padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #006d60; cursor: pointer;">
+         <div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer;">
                 <input type="checkbox" id="even-distribution" checked style="width: 18px; height: 18px; cursor: pointer;">
-                تفعيل التوزيع العادل للمتدربين
+                تفعيل التوزيع العادل
             </label>
         </div>
 
-        <div class="packages-header" style="flex-wrap: wrap; gap: 15px;">
-            <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="packages-header" style="flex-wrap: wrap; gap: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong);">
+            <div style="display: flex; align-items: center; gap: 10px; color: var(--primary);">
                 <strong>عدد الرزم:</strong>
-                <input type="number" id="num-packages" min="1" max="50" value="1" onchange="generatePackageCards()">
+                <input type="number" id="num-packages" min="1" max="80" value="1" onchange="generatePackageCards()" style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px;">
             </div>
-             <div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button onclick="openAutoGenModal()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#d68910'" onmouseout="this.style.backgroundColor='#f39c12'">
-                توليد الرزم تلقائيًا
+                     توليد الرزم تلقائيًا
+                </button>
+                <button onclick="deleteAllPackages()" style="background-color: #dc3545; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#c82333'" onmouseout="this.style.backgroundColor='#dc3545'" title="حذف جميع الرزم والبدء من جديد">
+                    🗑️ حذف الكل
                 </button>
             </div>
         </div>
@@ -512,7 +530,9 @@
                 const colCourse = document.getElementById('col_ss01_course').value.trim();
                 const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
                 const colRem = document.getElementById('col_ss01_remaining') ? document.getElementById('col_ss01_remaining').value.trim() : 'متبقي';
-                
+                const colInstructor = document.getElementById('col_ss01_instructor') ? document.getElementById('col_ss01_instructor').value.trim() : 'اسم المدرب';
+                const colRoom = document.getElementById('col_ss01_room') ? document.getElementById('col_ss01_room').value.trim() : 'قاعة';
+
                 globalCRNDetails = {};
                 rawSS01.forEach(row => {
                     let crn = String(row[colCrn]).trim();
@@ -523,8 +543,8 @@
                         let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
                         
                           if (!globalCRNDetails[crn]) {
-                            let instructorName = row['اسم المدرب Primary'] || row['المدرب'] || row['المدرس'] || 'غير محدد';
-                            let roomNum = row['القاعة'] || row['مبنى'] || row['غرفة'] || '-';
+                            let instructorName = row[colInstructor] || row['اسم المدرب'] || row['المدرب'] || row['المدرس'] || 'غير محدد';
+                            let roomNum = row[colRoom] || row['القاعة'] || row['قاعة'] || row['غرفة'] || '-';
 
                             globalCRNDetails[crn] = {
                                 course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
@@ -920,6 +940,24 @@ function handleCRNInput(event, pkgId) {
         loadPackagesFromLocal();
         showToast("🗑️ تم حذف الرزمة بنجاح");
         saveSessionState(); // حفظ الجلسة لضمان عدم ضياع التعديل
+    }
+
+    // دالة حذف جميع الرزم دفعة واحدة
+    function deleteAllPackages() {
+        if (!confirm("هل أنت متأكد/ـة من رغبتك في حذف جميع الرزم الحالية والبدء من جديد؟")) return;
+
+        // إعادة العداد إلى 1
+        document.getElementById('num-packages').value = 1;
+        localStorage.setItem('numPackages', 1);
+
+        // إنشاء رزمة واحدة فارغة كبداية جديدة
+        let emptyPackage = [{ id: 1, prog: "", cap: "20", crns: "" }];
+        localStorage.setItem('savedPackages', JSON.stringify(emptyPackage));
+
+        // إعادة تحميل الواجهة
+        loadPackagesFromLocal();
+        showToast("🗑️ تم حذف جميع الرزم بنجاح");
+        saveSessionState();
     }
     
     function savePackagesToLocal() {

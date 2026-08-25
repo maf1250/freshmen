@@ -376,13 +376,6 @@
                 <span id="btnText-2">تنفيذ الإسناد وعرض النتائج</span>
             </button>
         </div>
-        <!-- خيار استثناء الفيزياء -->
-        <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">
-                <input type="checkbox" id="exclude-physics-practical" checked style="width: 18px; height: 18px; cursor: pointer;" onchange="savePhysicsSetting()">
-                استثناء مقرر الفيزياء (فيزي-101) من الشق العملي واحتسابه كشعبة نظرية فقط
-            </label>
-        </div>
         <!-- دليل الألوان -->
         <div class="crn-legend">
             <span>🟢 مقرر في المستوى الأول</span>
@@ -395,7 +388,13 @@
                 تفعيل التوزيع العادل
             </label>
         </div>
-
+ <!-- خيار استثناء الفيزياء -->
+        <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
+            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">
+                <input type="checkbox" id="exclude-physics-practical" checked style="width: 18px; height: 18px; cursor: pointer;" onchange="savePhysicsSetting()">
+                استثناء مقرر الفيزياء (فيزي-101) من الشق العملي واحتسابه كشعبة نظرية فقط
+            </label>
+        </div>
         <div class="packages-header" style="flex-wrap: wrap; gap: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong);">
             <div style="display: flex; align-items: center; gap: 10px; color: var(--primary);">
                 <strong>عدد الرزم:</strong>

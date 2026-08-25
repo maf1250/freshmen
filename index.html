@@ -370,14 +370,11 @@
     <div id="page-2" class="page">
  <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px; border-bottom: 2px dashed var(--primary); padding-bottom: 10px; margin-bottom: 20px;">
             
-            <!-- العنوان (يمين) -->
             <h2 style="margin: 0; color: var(--primary);">إعداد وتخصيص الرزم التدريبية</h2>
-            
-            <!-- الزرين الإضافيين (أعلى يسار) -->
             <div style="display: flex; gap: 10px;">
             
                 <button class="btn-action btn-secondary" onclick="switchPage('page-1')">رجوع</button>
-                <button class="btn-process" onclick="processAssignments()">
+                <button class="btn-process" style="white-space: nowrap; width: max-content; min-width: 220px;" onclick="processAssignments()">
                 <span class="loader" id="loader-2"></span>
                 <span id="btnText-2">تنفيذ الإسناد وعرض النتائج</span>
             </button>

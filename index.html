@@ -553,15 +553,13 @@
                     });
                 }
             }
-            let rawSP15 = await readExcelFile(sp15File);
-            traineesData = [];
-            let programsSet = new Set();
+           
             
             let rawSP15 = await readExcelFile(sp15File);
             traineesData = [];
             let programsSet = new Set();
-            let seenIds = new Set(); // مصفوفة لتتبع الأرقام المسجلة مسبقاً
-
+            let seenIds = new Set(); 
+            
             rawSP15.forEach(row => {
                 let id = String(row[colId]).trim();
                 let name = row[colName] || row['الاسم'] || row['اسم المتدرب'] || row['إسم المتدرب'] || row['Name'] || '';
@@ -580,6 +578,7 @@
 
             generatePackageCards();
             loadPackagesFromLocal();
+            saveSessionState();
             switchPage('page-2');
 
         } catch (error) { status.innerText = error.message; } 
@@ -942,6 +941,7 @@ function savePhysicsSetting() {
         setupPage3();
         document.getElementById('loader-2').style.display = 'none';
         document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
+        saveSessionState();
         switchPage('page-3');
     }
 
@@ -2064,6 +2064,7 @@ function changeTraineePackage(traineeId, newPkgId) {
     // إعادة رسم الجدول لتحديث الإحصائيات والألوان
     renderResultsTable();
     showToast('✅ تم تحديث الرزمة وتعديل المقاعد بنجاح!');
+    saveSessionState();
 }
     
     function exportResultsToExcel() {

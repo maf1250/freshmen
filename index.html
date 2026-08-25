@@ -7,6 +7,8 @@
     <title>منظومة الإسناد الآلي للمستجدين (نظام الرزم)</title>   
     <!-- مكتبات قراءة وتصدير الملفات -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
         * { font-family: 'Cairo', sans-serif; box-sizing: border-box; }
@@ -542,11 +544,6 @@
                                 let parts = 1; 
                                 if (theory > 0 && practical > 0) {
                                     parts = 2; 
-                                }
-                                
-                                let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-                                if (excludePhysics && (normCourse.includes('فيزي') || normCourse.includes('فيزياء') || normCourse.includes('phys'))) {
-                                    parts = 1; 
                                 }
                                 
                                 dynamicSC04Plan[cleanProg].requiredParts += parts;
@@ -1172,18 +1169,6 @@ function savePhysicsSetting() {
                 }
                 else {
                     if (planData) {
-                        // حساب إجمالي الشعب المطلوبة ديناميكياً لتحديث استثناء الفيزياء
-                        let requiredParts = 0;
-                        Array.from(planData.courses).forEach(planCourse => {
-                            let normPlanCourse = normalizeCode(planCourse);
-                            let req = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
-                            let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-                            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                                req = 1;
-                            }
-                            requiredParts += req;
-                        });
-
                         // تجهيز المتغيرات للنافذة المنبثقة
                         let strCrnsEscaped = JSON.stringify(st.assignedCRNs || []).replace(/"/g, '&quot;');
                         let programEscaped = (st.program || '').replace(/"/g, '&quot;');
@@ -1424,40 +1409,47 @@ if (st.assignedCRNs && st.assignedCRNs.length > 0) {
             });
         }
 
-        let requiredParts = 0;
 
-        planCoursesList.forEach(planCourse => {
+       let requiredParts = 0; // إجمالي الشعب المطلوبة لهذا المتدرب
+
+               planCoursesList.forEach(planCourse => {
             let normPlanCourse = normalizeCode(planCourse);
             let reqForThis = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
-
             let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                reqForThis = 1;
-            }
-            requiredParts += reqForThis;
 
-            let assignedForThis = 0;
+            let hasTheory = false;
+            let hasPrac = false;
+            let distinctTypes = 0;
+            let statCount = 0;
+
             for (let studentNormCourse in studentCoursesMap) {
                 if (studentNormCourse.includes(normPlanCourse) || normPlanCourse.includes(studentNormCourse)) {
                     let stat = studentCoursesMap[studentNormCourse];
-                    if (reqForThis === 2) {
-                        let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
-                        let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-                        let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
-
-                        if ((hasTheory && hasPrac) || distinctTypes >= 2) {
-                            assignedForThis = 2;
-                        } else if (stat.count >= 2) {
-                            assignedForThis = 1; 
-                        } else {
-                            assignedForThis = stat.count;
-                        }
-                    } else {
-                        assignedForThis = stat.count;
-                    }
+                    statCount = stat.count;
+                    hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+                    hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+                    distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
                     break;
                 }
             }
+
+            //  الذكاء الاصطناعي 
+            if (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys')) {
+                if ((hasTheory && hasPrac) || distinctTypes >= 2) reqForThis = 2;
+                else if (excludePhysics) reqForThis = 1;
+            }
+
+            requiredParts += reqForThis;
+
+            let assignedForThis = 0;
+            if (reqForThis === 2) {
+                if ((hasTheory && hasPrac) || distinctTypes >= 2) assignedForThis = 2;
+                else if (statCount >= 2) assignedForThis = 1;
+                else assignedForThis = statCount;
+            } else {
+                assignedForThis = statCount;
+            }
+            
             validStudentPartsCount += Math.min(assignedForThis, reqForThis);
         });
 
@@ -1833,12 +1825,21 @@ function parseTimeToMinutes(timeStr) {
             let normPlanCourse = normalizeCode(planCourse);
             let requiredParts = window.globalCourseRequirements ? (window.globalCourseRequirements[normPlanCourse] || 1) : 1;
             
+            let stat = assignedStatus[planCourse];
+            let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
+            let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
+            let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
+            
             let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-            if (excludePhysics && (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys'))) {
-                requiredParts = 1; 
+            
+            if (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys')) {
+                if ((hasTheory && hasPrac) || distinctTypes >= 2) {
+                    requiredParts = 2; // أضاف المستخدم الشقين، نطلب 2
+                } else if (excludePhysics) {
+                    requiredParts = 1; // لم يضفهم والصح موجود، نطلب 1
+                }
             }
             
-            let stat = assignedStatus[planCourse];
             let statusBadge = '';
 
             let fullWarning = "";
@@ -1853,10 +1854,6 @@ function parseTimeToMinutes(timeStr) {
             if (fullCrns.length > 0) {
                 fullWarning = `<br><span class="badge" style="background:#dc3545; color:#fff; margin-top:5px; display:inline-block; font-size:12px; box-shadow: 0 1px 3px rgba(0,0,0,0.2);">🚫 السعة لا تكفي:<br>${fullCrns.join('<br>')}</span>`;
             }
-
-           let hasTheory = stat.types.some(t => t.includes('نظري') || t.includes('محاضرة') || t.includes('عن بعد') || t.includes('مدمج') || t.includes('ذاتي'));
-            let hasPrac = stat.types.some(t => t.includes('عملي') || t.includes('تدريب'));
-            let distinctTypes = new Set(stat.types.map(t => t.trim()).filter(t => t !== '')).size;
             
             let isComplete = false;
             let typeMsg = "";
@@ -2070,33 +2067,85 @@ function changeTraineePackage(traineeId, newPkgId) {
     saveSessionState();
 }
     
-    function exportResultsToExcel() {
-    if (traineesData.length === 0) {
-        showToast("لا توجد بيانات لتصديرها");
-        return;
+    async function exportResultsToExcel() {
+        if (traineesData.length === 0) {
+            showToast("لا توجد بيانات لتصديرها");
+            return;
+        }
+
+        try {
+            showToast("⏳ جار تجهيز الملف...");
+
+            // إنشاء كائن الإكسل
+            const workbook = new ExcelJS.Workbook();
+            
+                    const worksheet = workbook.addWorksheet("نتائج الإسناد", {
+                views: [{ rightToLeft: true }]
+            });
+
+            worksheet.columns = [
+                { header: "رقم المتدرب", key: "id", width: 15 },
+                { header: "اسم المتدرب", key: "name", width: 35 },
+                { header: "التخصص", key: "program", width: 25 },
+                { header: "رقم الرزمة", key: "package", width: 15 },
+                { header: "الأرقام المرجعية (CRNs)", key: "crns", width: 35 },
+                { header: "حالة الجدول", key: "conflict", width: 20 }
+            ];
+
+            traineesData.forEach(st => {
+                worksheet.addRow({
+                    id: st.id,
+                    name: st.name || 'غير متوفر',
+                    program: st.program,
+                    package: st.assignedPackage ? `رزمة ${st.assignedPackage}` : "غير مسند",
+                    crns: st.assignedCRNs && st.assignedCRNs.length > 0 ? st.assignedCRNs.join(" - ") : "لا يوجد",
+                    conflict: (st.assignedCRNs && checkScheduleConflicts(st.assignedCRNs).hasOverlap) ? "يوجد تعارض" : "سليم"
+                });
+            });
+
+            worksheet.eachRow((row, rowNumber) => {
+                row.eachCell((cell) => {
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                    cell.border = {
+                        top: { style: 'thin' }, left: { style: 'thin' },
+                        bottom: { style: 'thin' }, right: { style: 'thin' }
+                    };
+                });
+
+                if (rowNumber === 1) {
+                    row.font = { bold: true, color: { argb: 'FFFFFFFF' } }; 
+                    row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF008E7E' } };
+                }
+            });
+
+                    const rayatSheet = workbook.addWorksheet("رايات أوتو", {
+                views: [{ rightToLeft: true }]
+            });
+
+            traineesData.forEach(st => {
+                if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+                    const rowData = [st.id, ...st.assignedCRNs];
+                    rayatSheet.addRow(rowData);
+                }
+            });
+
+            rayatSheet.getColumn(1).width = 15;
+            rayatSheet.eachRow((row) => {
+                row.eachCell((cell) => {
+                    cell.alignment = { vertical: 'middle', horizontal: 'center' };
+                });
+            });
+
+            const buffer = await workbook.xlsx.writeBuffer();
+            const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            saveAs(blob, "نتائج_إسناد_الرزم.xlsx");
+            showToast("✅ تم تصدير الملف بنجاح!");
+        } catch (error) {
+            console.error(error);
+            showToast("❌ حدث خطأ أثناء التصدير");
+        }
     }
-
-    // تجهيز البيانات للتصدير
-    let exportData = traineesData.map(st => ({
-        "رقم المتدرب": st.id,
-        "اسم المتدرب": st.name,
-        "التخصص": st.program,
-        "رقم الرزمة المسندة": st.assignedPackage ? `رزمة ${st.assignedPackage}` : "غير مسند",
-        "الأرقام المرجعية (CRNs)": st.assignedCRNs ? st.assignedCRNs.join(" - ") : "لا يوجد",
-        "حالة التعارض الزمني": (st.assignedCRNs && checkScheduleConflicts(st.assignedCRNs).hasOverlap) ? "يوجد تعارض" : "سليم"
-    }));
-
-    // إنشاء ملف الإكسل
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
     
-    worksheet['!views'] = [{ rightToLeft: true }];
-
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "نتائج الإسناد");
-    
-    // تحميل الملف
-    XLSX.writeFile(workbook, "نتائج_إسناد_الرزم.xlsx");
-}
     // دوال الوضع الداكن
 function toggleTheme() {
     let currentTheme = document.documentElement.getAttribute("data-theme");

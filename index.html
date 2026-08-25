@@ -1635,15 +1635,10 @@ let successfulPackages = 0;
 
 // فحص السعة لتنبيه الجدول الخارجي
 let capacityWarning = '';
-                        let linkageErrors = getLinkageErrors(st.assignedCRNs);
-                let linkageWarning = '';
-                if (linkageErrors.length > 0) {
-                    linkageWarning = `<br><span ${clickAction} ${badgeHover} style="cursor:pointer; font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;" title="خطأ ارتباط: ${linkageErrors.join(' | ')}">🔗 خطأ ارتباط بالجدول</span>`;
-                }
-            if (st.assignedCRNs && st.assignedCRNs.length > 0) {
-            let hasCapacityIssue = st.assignedCRNs.some(crn => {
-            let c = String(crn).trim();
-            return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
+if (st.assignedCRNs && st.assignedCRNs.length > 0) {
+    let hasCapacityIssue = st.assignedCRNs.some(crn => {
+        let c = String(crn).trim();
+        return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining < 0;
     });
     
     if (hasCapacityIssue) {
@@ -1651,15 +1646,25 @@ let capacityWarning = '';
     }
 }
 
+// فحص ارتباط الشعب لتنبيه الجدول الخارجي (SF33)
+let linkageWarning = '';
+let linkageErrors = getLinkageErrors(st.assignedCRNs);
+if (linkageErrors.length > 0) {
+    linkageWarning = `<br><span ${clickAction} ${badgeHover} style="cursor:pointer; font-size:11px; background:#dc3545; color:#fff; padding:2px 5px; border-radius:4px; margin-top:4px; display:inline-block; font-weight:bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: 0.2s;" title="خطأ ارتباط: ${linkageErrors.join(' | ')}">🔗 خطأ ارتباط شعب</span>`;
+}
+
                         if (st.assignedPackage === null) {
                             planStatusHtml = `<td><span class="badge badge-danger">غير مسند</span></td>`;
                         }
                         else if (validStudentPartsCount === requiredParts && !hasUnmapped) {
-                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${capacityWarning}</td>`;
+                            // تم إضافة linkageWarning هنا لحالة "مكتمل"
+                            planStatusHtml = `<td><span class="badge badge-success" style="${badgeStyle}" ${badgeHover} ${clickAction}>✅ مكتمل (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${capacityWarning}${linkageWarning}</td>`;
                         } else if (validStudentPartsCount < requiredParts) {
-                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}</td>`;
+                            // تم إضافة linkageWarning هنا لحالة "ناقص"
+                            planStatusHtml = `<td><span class="badge badge-danger" style="${badgeStyle}" ${badgeHover} ${clickAction}>⚠️ ناقص (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}${linkageWarning}</td>`;
                         } else {
-                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}</td>`;
+                            // تم إضافة linkageWarning هنا لحالة "زائد"
+                            planStatusHtml = `<td><span class="badge badge-warning" style="background:#ffeeba; color:#856404; ${badgeStyle} border-bottom: 2px dashed #856404;" ${badgeHover} ${clickAction}>⬆️ زائد (${validStudentPartsCount} من ${requiredParts} شعبة)</span>${unmappedWarning}${capacityWarning}${linkageWarning}</td>`;
                         }
                     } else {
                         planStatusHtml = `<td><span class="badge" style="background:#f8d7da; color:#721c24;">غير موجود بالخطة</span></td>`;

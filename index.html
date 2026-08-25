@@ -528,12 +528,12 @@
                             let cleanCourse = course.trim();
                             let normCourse = normalizeCode(cleanCourse); 
                             
-                            if (!dynamicSC04Plan[cleanProg]) {
-                                dynamicSC04Plan[cleanProg] = { courses: new Set(), requiredParts: 0 };
+                             if (!dynamicSC04Plan[cleanProg]) {
+                                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0 };
                             }
                             
-                            if (!dynamicSC04Plan[cleanProg].courses.has(cleanCourse)) {
-                                dynamicSC04Plan[cleanProg].courses.add(cleanCourse);
+                            if (!dynamicSC04Plan[cleanProg].courses.includes(cleanCourse)) {
+                                dynamicSC04Plan[cleanProg].courses.push(cleanCourse);
                                 
                                 let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
                                 let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
@@ -2268,7 +2268,13 @@ function restoreSessionState() {
         uniquePrograms = state.uniquePrograms || [];
         packagesData = state.packagesData || [];
         globalCRNDetails = state.globalCRNDetails || {};
-        dynamicSC04Plan = state.dynamicSC04Plan || {}; // استعادة بيانات الخطة
+        dynamicSC04Plan = state.dynamicSC04Plan || {}; 
+        for (let prog in dynamicSC04Plan) {
+            if (dynamicSC04Plan[prog].courses && !Array.isArray(dynamicSC04Plan[prog].courses)) {
+                dynamicSC04Plan[prog].courses = [];
+            }
+        }
+        
         isSc04Attached = state.isSc04Attached || false; // استعادة حالة إرفاق الخطة
         window.globalCourseRequirements = state.globalCourseRequirements || {}; 
         

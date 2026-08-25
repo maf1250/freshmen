@@ -2105,17 +2105,24 @@ function parseTimeToMinutes(timeStr) {
                         html += `<div class="time-gap" style="width:${gapPixels}px; min-width:${gapPixels}px;">${gapText}</div>`;
                     }
 
-                    html += `
+                   html += `
                         <div class="time-course-card" style="width:${cardPixels}px; min-width:${cardPixels}px; max-width:${cardPixels}px; background-color: ${bgColor}; border-right: 4px solid ${borderColor}; padding: 6px; justify-content: space-between;">
                             <strong style="color:${titleColor}; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-bottom: 1px dashed ${borderColor}; padding-bottom: 3px; display:flex; justify-content:space-between; align-items:center;">
                                 <div style="display:flex; align-items:center; overflow:hidden;">${warningBadge}<span title="${course.course}">${course.course}</span></div>
                                 <span>${typeEmoji}</span>
                             </strong>
-                            <div style="font-size: 9px; color: var(--text-secondary); margin-top: 4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.instructor}">
-                                👨‍🏫 ${course.instructor}
+                            
+                            <div style="font-size: 10px; color: var(--text-secondary); margin-top: 4px; display: flex; flex-direction: column; gap: 3px;">
+                                <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-weight:bold; color:var(--text-primary);" title="${course.timeText}">
+                                    🕒 <span dir="ltr">${course.timeText}</span>
+                                </div>
+                                <div style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.instructor}">
+                                    👨‍🏫 ${course.instructor}
+                                </div>
                             </div>
+
                             <div style="display:flex; justify-content:space-between; align-items:center; gap:4px; font-size:10px; margin-top:4px;">
-                                <span style="background:var(--bg-inset); color:var(--text-primary); padding:2px 4px; border-radius:3px;">🚪 ${course.room}</span>
+                                <span style="background:var(--bg-inset); color:var(--text-primary); padding:2px 4px; border-radius:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${course.room}">🚪 ${course.room}</span>
                                 <span style="background:${borderColor}; color:#fff; padding:1px 4px; border-radius:3px; font-weight:bold;">${course.crn}</span>
                             </div>
                         </div>`;

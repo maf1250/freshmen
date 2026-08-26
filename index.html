@@ -508,21 +508,22 @@
     }
 
     // --- دالة التحقق من صحة الملفات المرفقة ---
-    async function validateFileHeaders(fileInput, requiredKeywords, fileAlias) {
+    // --- دالة التحقق من صحة الملفات المرفقة ---
+    async function validateFileHeaders(fileInput, requiredKeywordGroups, fileAlias) {
         const file = fileInput.files[0];
         if (!file) return;
         try {
             let data = await readExcelFile(file);
             if (data.length === 0) throw new Error("الملف فارغ");
             
-            // جمع عناوين الأعمدة من أول صف
             let headers = Object.keys(data[0]).join(' ');
             
-            // التحقق هل يحتوي على إحدى الكلمات الدلالية
-            let isValid = requiredKeywords.some(keyword => headers.includes(keyword));
+            let isValid = requiredKeywordGroups.every(group => 
+                group.some(keyword => headers.includes(keyword))
+            );
             
             if (!isValid) {
-                showToast(`❌ الملف المرفق في خانة ${fileAlias} غير صحيح! يرجى التأكد.`);
+                showToast(`❌ الملف المرفق في خانة ${fileAlias} غير صحيح! يرجى التأكد من نوع التقرير.`);
                 fileInput.value = ''; // تفريغ الحقل لمنع استمرار الخطأ
             } else {
                 showToast(`✅ تم التحقق من ملف ${fileAlias}`);
@@ -533,16 +534,48 @@
         }
     }
 
+  // دالة لتصفير الرزم بالكامل وإعادتها للحالة الافتراضية
+    function resetPackagesOnNewFile() {
+        document.getElementById('num-packages').value = 1;
+        localStorage.setItem('numPackages', 1);
+        let emptyPackage = [{ id: 1, prog: "", cap: "20", crns: "" }];
+        localStorage.setItem('savedPackages', JSON.stringify(emptyPackage));
+    }
+
     // ربط الحقول بالدالة بمجرد تحميل الصفحة
+   // دالة لتصفير الرزم بالكامل وإعادتها للحالة الافتراضية عند تغيير الملفات
+    function resetPackagesOnNewFile() {
+        document.getElementById('num-packages').value = 1;
+        localStorage.setItem('numPackages', 1);
+        let emptyPackage = [{ id: 1, prog: "", cap: "20", crns: "" }];
+        localStorage.setItem('savedPackages', JSON.stringify(emptyPackage));
+    }
+
+    // ربط الحقول بالدالة بمجرد تحميل الصفحة 
     window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sp15File').addEventListener('change', function() { 
-            validateFileHeaders(this, ['المتدرب', 'الاسم', 'تخصص'], 'قائمة المستجدين (SP15)'); 
+            validateFileHeaders(this, [['المتدرب', 'إسم المتدرب'], ['رمز البرنامج', 'البرنامج']], 'قائمة المستجدين (SP15)'); 
+            resetPackagesOnNewFile(); 
         });
+        
         document.getElementById('ss01File').addEventListener('change', function() { 
-            validateFileHeaders(this, ['مرجعي', 'CRN', 'وقت', 'قاعة', 'مبنى'], 'الجدول (SS01)'); 
+            validateFileHeaders(this, [['الرقم المرجعي', 'نوع الجدولة'], ['المقرر', 'اليوم']], 'الجدول (SS01)'); 
+            resetPackagesOnNewFile(); 
         });
+
+        let sf33Input = document.getElementById('sf33File');
+        if(sf33Input) {
+            sf33Input.addEventListener('change', function() { 
+                validateFileHeaders(this, [['الشعبة', 'الشعبة المرتبطة']], 'الشعب المرتبطة (SF33)'); 
+                resetPackagesOnNewFile(); 
+            });
+        }
+        
         document.getElementById('sc04File').addEventListener('change', function() {
-            if(this.files.length > 0) validateFileHeaders(this, ['تخصص', 'فصل', 'مقرر', 'نظري'], 'الخطة (SC04)');
+            if(this.files.length > 0) {
+                validateFileHeaders(this, [['فصل', 'مستوى', 'الفصل التدريبي'], ['مقرر', 'المقرر']], 'الخطة (SC04)');
+                resetPackagesOnNewFile(); 
+            }
         });
     });
     
@@ -722,10 +755,7 @@
             uniquePrograms = Array.from(programsSet).sort();
             if (traineesData.length === 0) throw new Error(`لم يتم العثور على بيانات المتدربين.`);
 
-            generatePackageCards();
-            loadPackagesFromLocal();
-            saveSessionState();
-            switchPage('page-2');
+            showPreValidationDashboard();
 
         } catch (error) { status.innerText = error.message; } 
         finally {
@@ -733,7 +763,96 @@
             document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
         }
     }
+
+    // --- دوال لوحة الملخص السريعة (Pre-validation Dashboard) ---
     
+    function showPreValidationDashboard() {
+        let traineeCount = traineesData.length;
+        let programCount = uniquePrograms.length;
+        let crnCount = Object.keys(globalCRNDetails).length;
+        
+        let htmlContent = `
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                <span style="font-size:20px;">👥</span>
+                <strong style="color:var(--text-primary);">تم التعرف على <span style="color:var(--primary); font-size:18px;">${traineeCount}</span> متدرب/ـة في <span style="color:var(--primary); font-size:18px;">${programCount}</span> تخصصات.</strong>
+            </div>
+            <div style="display:flex; align-items:center; gap:10px; margin-bottom:15px; border-bottom: 1px dashed var(--border); padding-bottom: 15px;">
+                <span style="font-size:20px;">🏫</span>
+                <strong style="color:var(--text-primary);">يوجد <span style="color:var(--primary); font-size:18px;">${crnCount}</span> شعبة متاحة في جدول الوحدة (SS01).</strong>
+            </div>
+        `;
+
+        let warnings = [];
+
+        // فحص وجود الخطة
+        if (!isSc04Attached) {
+            warnings.push(`لم يتم إرفاق ملف الخطة التدريبية (SC04). النظام سيعمل، لكن لن يوضح حالة اكتمال الجداول.`);
+        } else {
+            // فحص التخصصات المفقودة من الخطة
+            uniquePrograms.forEach(prog => {
+                let hasPlan = false;
+                let programClean = prog.trim();
+                
+                if (dynamicSC04Plan.hasOwnProperty(programClean)) {
+                    hasPlan = true;
+                } else {
+                    for (let key in dynamicSC04Plan) {
+                        if (isProgramMatch(programClean, key)) {
+                            hasPlan = true;
+                            break;
+                        }
+                    }
+                }
+                
+                if (!hasPlan) {
+                    warnings.push(`تخصص <strong>(${prog})</strong> موجود في قائمة المستجدين، لكن لم يتم العثور على خطة المستوى الأول له في ملف SC04!`);
+                }
+            });
+        }
+
+        // إذا لم يتم العثور على أي شعب في الجدول
+        if (crnCount === 0) {
+            warnings.push(`لم يتم العثور على أي شعب تدريبية. يرجى التأكد من ملف الجدول (SS01).`);
+        }
+
+        // طباعة التحذيرات إن وجدت
+        if (warnings.length > 0) {
+            htmlContent += `<div style="margin-top: 15px;">`;
+            warnings.forEach(warn => {
+                htmlContent += `
+                    <div style="background: #fff3cd; border: 1px solid #ffeeba; color: #856404; padding: 10px 15px; border-radius: 6px; margin-bottom: 8px; display:flex; align-items:flex-start; gap:8px;">
+                        <span style="font-size:16px;">⚠️</span>
+                        <span>${warn}</span>
+                    </div>`;
+            });
+            htmlContent += `</div>`;
+        } else {
+            htmlContent += `
+                <div style="background: #d4edda; border: 1px solid #c3e6cb; color: #155724; padding: 10px 15px; border-radius: 6px; margin-top: 15px; display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:16px;">✅</span>
+                    <strong>جميع البيانات تبدو سليمة وجاهزة للإسناد!</strong>
+                </div>`;
+        }
+
+        document.getElementById('pre-validation-content').innerHTML = htmlContent;
+        document.getElementById('pre-validation-modal').style.display = 'flex';
+        document.body.style.overflow = 'hidden';
+    }
+
+    function closePreValidationModal(event) {
+        if (event) event.stopPropagation();
+        document.getElementById('pre-validation-modal').style.display = 'none';
+        document.body.style.overflow = '';
+    }
+
+    // هذه الدالة تنقل المستخدم للصفحة 2 بعد موافقته على الملخص
+    function proceedToPage2() {
+        closePreValidationModal();
+        generatePackageCards();
+        loadPackagesFromLocal();
+        saveSessionState();
+        switchPage('page-2');
+    }
    // دالة عامة لتوحيد النصوص لتسهيل المقارنة في كل مكان
     function globalNormalizeCode(code) {
         if (!code) return '';
@@ -2907,6 +3026,21 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
             <div style="display: flex; gap: 10px; justify-content: center;">
                 <button class="btn-action btn-secondary" onclick="closeAutoGenModal(event)" style="width: auto; padding: 10px 30px; margin:0;">إلغاء</button>
                 <button class="btn-process" style="background-color: #f39c12; width: auto; padding: 10px 30px; margin:0; color:#fff;" onclick="startAutoGenerate()">تأكيد وتوليد</button>
+            </div>
+        </div>
+    </div>
+    <!-- نافذة لوحة الملخص السريعة -->
+    <div id="pre-validation-modal" class="modal-overlay" onclick="closePreValidationModal(event)">
+        <div class="modal-box" style="max-width: 600px;" onclick="event.stopPropagation()">
+            <button class="modal-close" onclick="closePreValidationModal(event)">✖</button>
+            <h2 style="text-align:center; color:var(--primary); margin-top:0; border-bottom: 2px dashed var(--border-strong); padding-bottom: 10px;">📊 ملخص قراءة البيانات</h2>
+            
+            <div id="pre-validation-content" style="background: var(--bg-elevated); padding: 20px; border-radius: 8px; border: 1px solid var(--border-strong); margin-bottom: 20px; font-size: 15px; text-align: right; line-height: 1.8;">
+            </div>
+            
+            <div style="display: flex; gap: 10px; justify-content: center;">
+                <button class="btn-action btn-secondary" onclick="closePreValidationModal(event)" style="width: auto; padding: 10px 30px; margin:0;">إلغاء وتعديل الملفات</button>
+                <button class="btn-process" style="width: auto; padding: 10px 40px; margin:0;" onclick="proceedToPage2()">متابعة لإعداد الرزم</button>
             </div>
         </div>
     </div>

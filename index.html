@@ -416,8 +416,7 @@
         <div class="packages-header" style="flex-wrap: wrap; gap: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong);">
             <div style="display: flex; align-items: center; gap: 10px; color: var(--primary);">
                 <strong>عدد الرزم:</strong>
-                <input type="number" id="num-packages" min="1" max="80" value="1" onchange="generatePackageCards()" style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px;">
-            </div>
+                <input type="number" id="num-packages" min="1" max="80" value="1" onchange="handleNumPackagesChange()" style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px;">            </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button onclick="openAutoGenModal()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#d68910'" onmouseout="this.style.backgroundColor='#f39c12'">
                      توليد الرزم تلقائيًا
@@ -848,7 +847,6 @@
     // هذه الدالة تنقل المستخدم للصفحة 2 بعد موافقته على الملخص
     function proceedToPage2() {
         closePreValidationModal();
-        generatePackageCards();
         loadPackagesFromLocal();
         saveSessionState();
         switchPage('page-2');
@@ -1004,34 +1002,48 @@ function handleCRNInput(event, pkgId) {
         savePackagesToLocal();
     }
 
-    // توليد كروت الرزم 
+    // 1. دالة حفظ البيانات من الشاشة إلى الذاكرة
+    function savePackagesToLocal() {
+        const num = parseInt(document.getElementById('num-packages').value) || 1;
+        let pkgs = [];
+        for (let i = 1; i <= num; i++) {
+            let prog = document.getElementById(`pkg-program-${i}`);
+            let cap = document.getElementById(`pkg-capacity-${i}`);
+            let crns = document.getElementById(`pkg-crns-${i}`);
+            if (prog) {
+                pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
+            }
+        }
+        if (pkgs.length > 0) {
+            localStorage.setItem('savedPackages', JSON.stringify(pkgs));
+            localStorage.setItem('numPackages', pkgs.length);
+        }
+    }
+
+    // 2. دالة التعامل مع تغيير عدد الرزم (تحفظ الموجود ثم تعيد البناء)
+    function handleNumPackagesChange() {
+        savePackagesToLocal(); 
+        loadPackagesFromLocal();
+    }
+
+    // 3. دالة بناء هيكل كروت الرزم (HTML فقط بدون بيانات)
     function generatePackageCards() {
         const numInput = document.getElementById('num-packages');
         const num = parseInt(numInput.value) || 1;
         const container = document.getElementById('packages-container');
 
-        let tempSavedData = {};
-        for (let i = 1; i <= 50; i++) {
-            let prog = document.getElementById(`pkg-program-${i}`);
-            let cap = document.getElementById(`pkg-capacity-${i}`);
-            let crns = document.getElementById(`pkg-crns-${i}`);
-            if (prog && cap && crns) {
-                tempSavedData[i] = { prog: prog.value, cap: cap.value, crns: crns.value };
-            }
-        }
-
-        container.innerHTML = '';
+        container.innerHTML = ''; // مسح القديم
         let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
 
         for (let i = 1; i <= num; i++) {
             let card = document.createElement('div');
             card.className = 'package-card';
-           card.innerHTML = `
+            card.innerHTML = `
                 <h3>
                     <span>📦 رزمة رقم ${i}</span>
                     <button onclick="deletePackage(${i})" title="حذف هذه الرزمة" style="background: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;" onmouseover="this.style.background='#dc3545'; this.style.color='#fff';" onmouseout="this.style.background='rgba(220, 53, 69, 0.1)'; this.style.color='#dc3545';">✖</button>
                 </h3>
-                  <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
+                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>التخصص المستهدف:</label>
                         <select id="pkg-program-${i}" onchange="revalidatePackageTags(${i})" style="width: max-content; min-width: 200px;">
@@ -1046,79 +1058,78 @@ function handleCRNInput(event, pkgId) {
                 </div>
                 <div class="form-group">
                     <label>الأرقام المرجعية:</label>
-                    <!-- حقل مخفي لحفظ القيم كالسابق للبرمجة -->
                     <input type="hidden" id="pkg-crns-${i}" onchange="savePackagesToLocal()">
-                    <!-- الحقل الظاهر للمستخدم للطباعة -->
                     <input type="text" id="pkg-crns-input-${i}" placeholder="نأمل كتابة رقم أو عدة أرقام مرجعية ثم اضغط Enter أو مسافة" onkeydown="handleCRNInput(event, ${i})">
-                    <!-- حاوية إدراج الوسوم البيضاوية -->
                     <div id="pkg-crns-tags-${i}" class="crn-tags-container"></div>
                 </div>
             `;
             container.appendChild(card);
-
-            if (tempSavedData[i]) {
-                setTimeout(() => {
-                    let progEl = document.getElementById(`pkg-program-${i}`);
-                    if (progEl) progEl.value = tempSavedData[i].prog;
-                    
-                    let capEl = document.getElementById(`pkg-capacity-${i}`);
-                    if (capEl) capEl.value = tempSavedData[i].cap;
-                    
-                    let crnsHiddenEl = document.getElementById(`pkg-crns-${i}`);
-                    if (crnsHiddenEl) {
-                        crnsHiddenEl.value = tempSavedData[i].crns;
-                        // رسم الوسوم بناءً على الداتا السابقة
-                        let crnsArray = tempSavedData[i].crns.split(/[\s,،]+/).filter(c => c.trim() !== "");
-                        crnsArray.forEach(c => addCRNTag(c, i, true));
-                    }
-                }, 0);
-            }
         }
-        
-        localStorage.setItem('numPackages', num);
-        savePackagesToLocal();
     }
 
-    // دالة حذف الرزمة مع إعادة الترتيب
+    // 4. دالة الاسترجاع (تبني الهيكل ثم تعبئه بالبيانات فوراً وبشكل متزامن)
+    function loadPackagesFromLocal() {
+        let savedNum = localStorage.getItem('numPackages');
+        let savedPkgsRaw = localStorage.getItem('savedPackages');
+        let savedPhysics = localStorage.getItem('excludePhysics');
+        
+        if (savedPhysics !== null) {
+            let el = document.getElementById('exclude-physics-practical');
+            if(el) el.checked = (savedPhysics === 'true');
+        }
+
+        if (savedNum) document.getElementById('num-packages').value = savedNum;
+        
+        // 1. نبني الكروت فارغة
+        generatePackageCards(); 
+        
+        // 2. نقوم بتعبئتها مباشرة إذا كان هناك بيانات
+        if (savedPkgsRaw) {
+            let savedPkgs = JSON.parse(savedPkgsRaw);
+            savedPkgs.forEach(pkg => {
+                let progEl = document.getElementById(`pkg-program-${pkg.id}`);
+                let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
+                let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
+                
+                if (progEl) progEl.value = pkg.prog || "";
+                if (capEl) capEl.value = pkg.cap || 20;
+                if (crnsHiddenEl) {
+                    crnsHiddenEl.value = pkg.crns || "";
+                    let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
+                    if(container) container.innerHTML = ''; // مسح القديم
+                    
+                    let crnsArray = (pkg.crns || "").split(/[\s,،]+/).filter(c => c.trim() !== "");
+                    crnsArray.forEach(c => addCRNTag(c, pkg.id, true)); 
+                }
+            });
+        }
+    }
+
+    // 5. دالة حذف الرزمة
     function deletePackage(pkgIdToRemove) {
         if (!confirm(`هل أنت متأكد/ـة من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
 
-        let num = parseInt(document.getElementById('num-packages').value) || 1;
-        let currentPackages = [];
+        savePackagesToLocal(); // حفظ الوضع الحالي قبل الحذف
+        let currentPackages = JSON.parse(localStorage.getItem('savedPackages')) || [];
         
-        for (let i = 1; i <= num; i++) {
-            let progEl = document.getElementById(`pkg-program-${i}`);
-            let capEl = document.getElementById(`pkg-capacity-${i}`);
-            let crnsEl = document.getElementById(`pkg-crns-${i}`);
-            
-            if (progEl && capEl && crnsEl) {
-                currentPackages.push({
-                    prog: progEl.value,
-                    cap: capEl.value,
-                    crns: crnsEl.value
-                });
-            }
-        }
-        
-        currentPackages.splice(pkgIdToRemove - 1, 1);
+        currentPackages.splice(pkgIdToRemove - 1, 1); // إزالة الرزمة
         
         if (currentPackages.length === 0) {
-            currentPackages.push({ prog: "", cap: "20", crns: "" });
+            currentPackages.push({ id: 1, prog: "", cap: "20", crns: "" });
         }
         
         currentPackages.forEach((pkg, index) => {
-            pkg.id = index + 1;
+            pkg.id = index + 1; // ترتيب الأرقام مجدداً
         });
         
         let newNum = currentPackages.length;
         document.getElementById('num-packages').value = newNum;
         localStorage.setItem('numPackages', newNum);
-        
         localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
         
-        loadPackagesFromLocal();
+        loadPackagesFromLocal(); // إعادة بناء الشاشة بعد الحذف
         showToast("🗑️ تم حذف الرزمة بنجاح");
-        saveSessionState(); // حفظ الجلسة لضمان عدم ضياع التعديل
+        saveSessionState();
     }
 
     // دالة حذف جميع الرزم دفعة واحدة
@@ -1139,60 +1150,11 @@ function handleCRNInput(event, pkgId) {
         saveSessionState();
     }
     
-    function savePackagesToLocal() {
-        const num = parseInt(document.getElementById('num-packages').value) || 1;
-        let pkgs = [];
-        for (let i = 1; i <= num; i++) {
-            let prog = document.getElementById(`pkg-program-${i}`);
-            let cap = document.getElementById(`pkg-capacity-${i}`);
-            let crns = document.getElementById(`pkg-crns-${i}`);
-            if (prog) {
-                pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
-            }
-        }
-        localStorage.setItem('savedPackages', JSON.stringify(pkgs));
-    }
-
 function savePhysicsSetting() {
         let isChecked = document.getElementById('exclude-physics-practical').checked;
         localStorage.setItem('excludePhysics', isChecked);
     }
-
-   function loadPackagesFromLocal() {
-        let savedNum = localStorage.getItem('numPackages');
-        let savedPkgs = JSON.parse(localStorage.getItem('savedPackages'));
-        let savedPhysics = localStorage.getItem('excludePhysics');
-        
-        if (savedPhysics !== null) {
-            let el = document.getElementById('exclude-physics-practical');
-            if(el) el.checked = (savedPhysics === 'true');
-        }
-
-        if (savedNum && savedPkgs) {
-            document.getElementById('num-packages').value = savedNum;
-            generatePackageCards(); 
-            
-            setTimeout(() => {
-                savedPkgs.forEach(pkg => {
-                    let progEl = document.getElementById(`pkg-program-${pkg.id}`);
-                    let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
-                    let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
-                    
-                    if (progEl) progEl.value = pkg.prog;
-                    if (capEl) capEl.value = pkg.cap;
-                    if (crnsHiddenEl) {
-                        crnsHiddenEl.value = pkg.crns;
-                        let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
-                        if(container) container.innerHTML = ''; // مسح القديم
-                        let crnsArray = pkg.crns.split(/[\s,،]+/).filter(c => c.trim() !== "");
-                        crnsArray.forEach(c => addCRNTag(c, pkg.id, true)); // إعادة رسم الوسوم
-                    }
-                });
-                savePackagesToLocal();
-            }, 50);
-        }
-    }
-
+  
     // ---------------- دوال النافذة المنبثقة للتوليد الذكي ----------------
     function openAutoGenModal() {
         if (!isSc04Attached || Object.keys(dynamicSC04Plan).length === 0) {

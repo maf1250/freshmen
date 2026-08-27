@@ -1286,10 +1286,6 @@ let successfulPackages = 0;
                             let crnsText = allPool.length > 0 ? `[أرقام الشعب: ${allPool.join('، ')}]` : '[لا توجد شعب بالجدول]';
                             missingGlobally.push(`${planCourse} ${crnsText}`);
                         } else requiredPicks.push({ name: planCourse, options: options });
-                    } else {
-                        let options = getValidOptions([...pool.theory, ...pool.practical]);
-                        if (options.length === 0) missingGlobally.push(planCourse);
-                        else requiredPicks.push({ name: planCourse, options: options });
                     }
                 });
 

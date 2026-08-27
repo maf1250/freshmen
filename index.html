@@ -1619,7 +1619,7 @@ let successfulPackages = 0;
                     requiredPartsFromSS01[nCode] = { theory: false, practical: false };
                 }
                 let typeStr = String(details.type).toLowerCase();
-                if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) requiredPartsFromSS01[nCode].theory = true;
+                if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) requiredPartsFromSS01[nCode].theory = true;
                 if (typeStr.includes('عملي') || typeStr.includes('تدريب')) requiredPartsFromSS01[nCode].practical = true;
             }
 

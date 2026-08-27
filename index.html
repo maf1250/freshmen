@@ -3044,16 +3044,16 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
     <div id="old-students-alert-modal" class="modal-overlay" style="z-index: 100001;">
         <div class="modal-box" style="max-width: 550px;">
             <button class="modal-close" onclick="closeOldStudentsAlert()">✖</button>
-            <h2 style="text-align:center; color:#d35400; margin-top:0; border-bottom: 2px dashed #f5cba7; padding-bottom: 10px;">⚠️ تنبيه: متدربون من دفعات سابقة</h2>
+            <h2 style="text-align:center; color:#d35400; margin-top:0; border-bottom: 2px dashed #f5cba7; padding-bottom: 10px;">⚠️ تنبيه: أرقام من دفعات سابقة</h2>
             
             <div style="font-size: 15px; color: #333; text-align: right; line-height: 1.8; margin-bottom: 20px; background: #fdf2e9; padding: 15px; border-radius: 8px; border: 1px solid #fad7a1;">
                 اكتشف النظام وجود <strong id="old-students-count" style="color:#d35400; font-size: 18px;">0</strong> متدرب/ـة أرقامهم التدريبية أقدم من الفصل الحالي (<span id="current-term-display"></span>).<br>
-                قد يكون هؤلاء المتدربين (مؤجلين أو مطوي قيدهم سابقاً وعادوا للتدريب)، وقد يكون لديهم مقررات مجتازة.
+                قد يكون هؤلاء المتدربين (مؤجلين أو مطوي قيدهم سابقًا وعادوا للتدريب)، وقد يكون لديهم مقررات مجتازة.
                 <br><br><strong>كيف تود التعامل معهم؟</strong>
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-                <button class="btn-action btn-secondary" onclick="viewOldStudentsList()" style="width: auto; padding: 10px 15px; background: #34495e;">👁️ عرض قائمة أسمائهم</button>
+                <button class="btn-action btn-secondary" onclick="viewOldStudentsList()" style="width: auto; padding: 10px 15px; background: #34495e;">عرض قائمة الأسماء</button>
                 <button class="btn-process" style="width: auto; padding: 10px 15px; background-color: #dc3545; color:#fff;" onclick="executeAssignments(false)">استثنائهم (عدم الإسناد)</button>
                 <button class="btn-process" style="width: auto; padding: 10px 15px; background-color: #008e7e;" onclick="executeAssignments(true)">تجاهل التنبيه (إسناد للكل)</button>
             </div>

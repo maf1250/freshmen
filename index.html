@@ -560,7 +560,7 @@
     // ربط الحقول بالدالة بمجرد تحميل الصفحة 
     window.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sp15File').addEventListener('change', function() { 
-            validateFileHeaders(this, [['المتدرب', 'إسم المتدرب'], ['رمز البرنامج', 'البرنامج']], 'قائمة المستجدين (SP15)'); 
+            validateFileHeaders(this, [['المتدرب', 'إسم المتدرب'], ['الرزمة', 'رمز الرزمة'], ['رمز البرنامج', 'البرنامج']], 'قائمة المستجدين (SP15)'); 
             resetPackagesOnNewFile(); 
         });
         
@@ -572,14 +572,14 @@
         let sf33Input = document.getElementById('sf33File');
         if(sf33Input) {
             sf33Input.addEventListener('change', function() { 
-                validateFileHeaders(this, [['الشعبة', 'الشعبة المرتبطة']], 'الشعب المرتبطة (SF33)'); 
+                validateFileHeaders(this, [['الرابط', 'الشعبة المرتبطة']], 'الشعب المرتبطة (SF33)'); 
                 resetPackagesOnNewFile(); 
             });
         }
         
         document.getElementById('sc04File').addEventListener('change', function() {
             if(this.files.length > 0) {
-                validateFileHeaders(this, [['فصل', 'مستوى', 'الفصل التدريبي'], ['مقرر', 'المقرر']], 'الخطة (SC04)');
+                validateFileHeaders(this, [['فصل', 'مستوى', 'الفصل التدريبي'], ['مقرر', 'المقرر'],  ['الدرجة', 'نوع التدريب']], 'الخطة (SC04)');
                 resetPackagesOnNewFile(); 
             }
         });

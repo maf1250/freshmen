@@ -1267,14 +1267,25 @@ let successfulPackages = 0;
                             .sort((a, b) => tempRemaining[b] - tempRemaining[a]); // ترتيب ثابت لا عشوائي
                     };
 
-                    if (reqParts === 2) {
+                   if (reqParts === 2) {
                         let tOptions = getValidOptions(pool.theory);
-                        if (tOptions.length === 0) missingGlobally.push(`${planCourse} (نظري)`);
-                        else requiredPicks.push({ name: `${planCourse} (نظري)`, options: tOptions });
+                        if (tOptions.length === 0) {
+                            let crnsText = pool.theory.length > 0 ? `[شعب النظري: ${pool.theory.join('، ')}]` : '[لا توجد شعب بالجدول]';
+                            missingGlobally.push(`${planCourse} ${crnsText}`);
+                        } else requiredPicks.push({ name: `${planCourse} (نظري)`, options: tOptions });
 
                         let pOptions = getValidOptions(pool.practical);
-                        if (pOptions.length === 0) missingGlobally.push(`${planCourse} (عملي)`);
-                        else requiredPicks.push({ name: `${planCourse} (عملي)`, options: pOptions });
+                        if (pOptions.length === 0) {
+                            let crnsText = pool.practical.length > 0 ? `[شعب العملي: ${pool.practical.join('، ')}]` : '[لا توجد شعب بالجدول]';
+                            missingGlobally.push(`${planCourse} ${crnsText}`);
+                        } else requiredPicks.push({ name: `${planCourse} (عملي)`, options: pOptions });
+                    } else {
+                        let allPool = [...pool.theory, ...pool.practical];
+                        let options = getValidOptions(allPool);
+                        if (options.length === 0) {
+                            let crnsText = allPool.length > 0 ? `[أرقام الشعب: ${allPool.join('، ')}]` : '[لا توجد شعب بالجدول]';
+                            missingGlobally.push(`${planCourse} ${crnsText}`);
+                        } else requiredPicks.push({ name: planCourse, options: options });
                     } else {
                         let options = getValidOptions([...pool.theory, ...pool.practical]);
                         if (options.length === 0) missingGlobally.push(planCourse);
@@ -1302,7 +1313,7 @@ let successfulPackages = 0;
                             let result = findValidBundle(pickIndex + 1, testBundle); // جرب المستوى التالي
                             if (result) return result;
                         } else {
-                            lastConflictMissing = currentPick.name;
+                            lastConflictMissing = `${currentPick.name} [الأرقام المرجعية: ${currentPick.options.join('، ')}]`;
                         }
                     }
                     return null; // تراجع وبحث عن خيار آخر

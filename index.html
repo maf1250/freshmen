@@ -1602,26 +1602,14 @@ let successfulPackages = 0;
                 scheduleBtn = `<button onclick='openScheduleModal("${st.name}", ${strCrns})' style="${btnStyle} color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer; font-weight:bold; transition: 0.3s;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${btnText}</button>`;
             }
 
-            // حساب الساعات
+            // حساب الساعات: جمع ساعات المقررات الفريدة المسندة للمتدرب
             let totalHours = 0;
-            let countedCoursesForHours = new Set();
-            
+            let courseCreditsMap = {}; // مفتاح: رمز المقرر، القيمة: عدد الساعات
+
             const normalizeCode = (code) => {
                 if (!code) return '';
                 return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
             };
-
-            let requiredPartsFromSS01 = {};
-            for (let crnKey in globalCRNDetails) {
-                let details = globalCRNDetails[crnKey];
-                let nCode = normalizeCode(details.course);
-                if (!requiredPartsFromSS01[nCode]) {
-                    requiredPartsFromSS01[nCode] = { theory: false, practical: false };
-                }
-                let typeStr = String(details.type).toLowerCase();
-                if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) requiredPartsFromSS01[nCode].theory = true;
-                if (typeStr.includes('عملي') || typeStr.includes('تدريب')) requiredPartsFromSS01[nCode].practical = true;
-            }
 
             if (st.assignedCRNs && st.assignedCRNs.length > 0) {
                 st.assignedCRNs.forEach(crn => {
@@ -1630,23 +1618,22 @@ let successfulPackages = 0;
                         let rawCourse = globalCRNDetails[crnClean].course;
                         let normCourse = normalizeCode(rawCourse);
                         let hrs = parseFloat(globalCRNDetails[crnClean].hours) || 0;
-                        let typeStr = String(globalCRNDetails[crnClean].type).toLowerCase();
                         
-                        if (!countedCoursesForHours.has(normCourse)) {
-                            let hasTheoryInCollege = requiredPartsFromSS01[normCourse] ? requiredPartsFromSS01[normCourse].theory : false;
-                            let isTheoryCrn = typeStr.includes('نظري') || typeStr.includes('محاضرة');
-                            
-                            if (!hasTheoryInCollege || isTheoryCrn) {
-                                totalHours += hrs;
-                                countedCoursesForHours.add(normCourse); 
-                            }
+                        // نأخذ القيمة الأعلى للساعات المسجلة لهذا المقرر 
+                        // (مثلاً إذا كان العملي 0 والنظري 3، سيأخذ 3 للمقرر ككل)
+                        if (!courseCreditsMap[normCourse] || hrs > courseCreditsMap[normCourse]) {
+                            courseCreditsMap[normCourse] = hrs;
                         }
                     }
                 });
+                
+                // الآن نجمع الساعات النهائية لجميع المقررات المختلفة
+                for (let courseKey in courseCreditsMap) {
+                    totalHours += courseCreditsMap[courseKey];
+                }
             }
 
             let hoursBadge = totalHours > 0 ? `<span style="color:#006d60; font-weight:bold;">${totalHours}</span>` : `<span style="color:#dc3545; font-weight:bold;">0</span>`;
-
             let planData = null;
             if (st.program && isSc04Attached && Object.keys(dynamicSC04Plan).length > 0) {
                 let programClean = st.program.trim();

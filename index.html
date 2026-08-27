@@ -514,7 +514,6 @@
     }
 
     // --- دالة التحقق من صحة الملفات المرفقة ---
-    // --- دالة التحقق من صحة الملفات المرفقة ---
     async function validateFileHeaders(fileInput, requiredKeywordGroups, fileAlias) {
         const file = fileInput.files[0];
         if (!file) return;
@@ -579,7 +578,7 @@
         
         document.getElementById('sc04File').addEventListener('change', function() {
             if(this.files.length > 0) {
-                validateFileHeaders(this, [['فصل', 'مستوى', 'الفصل التدريبي'], ['مقرر', 'المقرر'],  ['الدرجة', 'نوع التدريب']], 'الخطة (SC04)');
+                validateFileHeaders(this, [['فصل', 'المستوى', 'الفصل التدريبي'], ['مقرر', 'المقرر'],  ['فعالية البرنامج', 'المتطلب']], 'الخطة (SC04)');
                 resetPackagesOnNewFile(); 
             }
         });

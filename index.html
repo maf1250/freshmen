@@ -2349,7 +2349,7 @@ function parseTimeToMinutes(timeStr) {
         });
     }
 
- // فتح نافذة تفاصيل الخطة
+// فتح نافذة تفاصيل الخطة
     function openPlanModal(studentName, program, crnsArray) {
         document.getElementById('plan-modal-title').innerText = `حالة المقررات: ${studentName}`;
         const content = document.getElementById('plan-modal-content-area');
@@ -2430,6 +2430,7 @@ function parseTimeToMinutes(timeStr) {
                             <tr>
                                 <th>رمز المقرر</th>
                                 <th>اسم المقرر</th>
+                                <th>الوحدات المعتمدة</th>
                                 <th>الشعب المطلوبة</th>
                                 <th>الشعب المسندة</th>
                                 <th>حالة المقرر</th>
@@ -2450,14 +2451,13 @@ function parseTimeToMinutes(timeStr) {
             
             if (normPlanCourse.includes('فيزي') || normPlanCourse.includes('فيزياء') || normPlanCourse.includes('phys')) {
                 if ((hasTheory && hasPrac) || distinctTypes >= 2) {
-                    requiredParts = 2; // أضاف المستخدم الشقين، نطلب 2
+                    requiredParts = 2; 
                 } else if (excludePhysics) {
-                    requiredParts = 1; // لم يضفهم والصح موجود، نطلب 1
+                    requiredParts = 1; 
                 }
             }
             
             let statusBadge = '';
-
             let fullWarning = "";
             let fullCrns = [];
             stat.crns.forEach(c => {
@@ -2479,7 +2479,6 @@ function parseTimeToMinutes(timeStr) {
 
             if (requiredParts === 2) {
                 if (stat.partsCount >= 2) {
-                    // يجب أن يكون الشقان مختلفين
                     if ((hasTheory && hasPrac) || distinctTypes >= 2) {
                         isComplete = true;
                     } else {
@@ -2508,28 +2507,30 @@ function parseTimeToMinutes(timeStr) {
                 statusBadge = `<span class="badge badge-danger" style="background:#dc3545; color:#fff;">⚠️ ناقص${typeMsg}</span>` + fullWarning;
             }
 
-           // --- محاولة استخراج اسم المقرر ---
+           // --- استخراج اسم المقرر والوحدات المعتمدة ---
             let courseNameToShow = "غير متوفر";
+            let courseHoursToShow = "-";
+            
             if (stat.crns.length > 0) {
-                // إذا كان مسجلاً، اسحب الاسم من تفاصيل الشعبة المسندة
                 courseNameToShow = globalCRNDetails[stat.crns[0]].name;
+                courseHoursToShow = globalCRNDetails[stat.crns[0]].hours;
             } else {
-                // إذا لم يكن مسجلاً، ابحث عنه في كل شعب الكلية
                 let normPlanCourseForSearch = normalizeCode(planCourse);
                 for (let crnKey in globalCRNDetails) {
                     let gCode = normalizeCode(globalCRNDetails[crnKey].course);
                     if (normPlanCourseForSearch.includes(gCode) || gCode.includes(normPlanCourseForSearch)) {
                         courseNameToShow = globalCRNDetails[crnKey].name;
+                        courseHoursToShow = globalCRNDetails[crnKey].hours;
                         break;
                     }
                 }
             }
             if (!courseNameToShow || courseNameToShow.trim() === "") courseNameToShow = "غير متوفر";
-            // ------------------------------------
 
             html += `<tr>
                         <td><strong>${planCourse}</strong></td>
                         <td style="font-weight: 600; color: #006d60;">${courseNameToShow}</td>
+                        <td style="font-weight: 800; color: #008e7e;">${courseHoursToShow}</td>
                         <td>${requiredParts}</td>
                         <td>${stat.partsCount}</td>
                         <td>${statusBadge}</td>

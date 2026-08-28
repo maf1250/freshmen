@@ -1523,39 +1523,121 @@ function autoGeneratePackages(defaultCap) {
     document.getElementById('ai-log-modal').style.display = 'flex';
 }
     
-// . الدالة الأساسية عند الضغط على زر "تنفيذ الإسناد"
+// 1. الدالة الأساسية عند الضغط على زر "تنفيذ الإسناد"
 function processAssignments() {
-    const num = parseInt(document.getElementById('num-packages').value) || 1;
+    const num = parseInt(document.getElementById('num-packages').value) || 0;
     const status = document.getElementById('status-2');
     
-    // التحقق من صحة بيانات الرزم الأساسية
+    if (num === 0) {
+        showToast("⚠️ نأمل إضافة رزمة واحدة على الأقل");
+        return;
+    }
+
+    // التحقق من صحة بيانات الرزم الأساسية وتجهيزها
     packagesData = [];
     for (let i = 1; i <= num; i++) {
         let progEl = document.getElementById(`pkg-program-${i}`);
         let capEl = document.getElementById(`pkg-capacity-${i}`);
         let crnsHiddenEl = document.getElementById(`pkg-crns-${i}`);
         
-        if (!progEl || !progEl.value || !crnsHiddenEl.value || crnsHiddenEl.value.trim() === "") {
-            status.innerText = `نأمل استكمال بيانات الرزمة رقم ${i} (التخصص والأرقام المرجعية).`;
+        if (!progEl || !progEl.value || !crnsHiddenEl || !crnsHiddenEl.value.trim()) {
+            status.innerText = `⚠️ نأمل استكمال بيانات الرزمة رقم ${i} (التخصص والأرقام المرجعية).`;
+            showToast(`نقص في بيانات الرزمة ${i}`);
             return;
         }
 
-        let crns = [...new Set(crnsHiddenEl.value.split(/[\s,،]+/).filter(c => c.trim() !== ""))];
+        // تنظيف الأرقام المرجعية والتأكد من أنها مصفوفة
+        let crnsArray = crnsHiddenEl.value.split(/[\s,،]+/).filter(c => c.trim() !== "");
+        
         packagesData.push({ 
             id: i, 
             program: progEl.value, 
             maxCapacity: parseInt(capEl.value) || 20, 
             currentCount: 0, 
-            crns: crns 
+            crns: [...new Set(crnsArray)] // إزالة التكرار
         });
     }
 
-    // التحقق من خيار الدراسات العامة
-    const isGSEnabled = document.getElementById('enable-general-studies').checked;
-    if (isGSEnabled) {
-        openGSModal(); // نفتح نافذة التخصيص أولاً
-    } else {
-        checkOldStudentsAndExecute(); // ننتقل لفحص المتدربين القدامى مباشرة
+    // فحص المتدربين القدامى ثم الانتقال للتنفيذ
+    checkOldStudentsAndExecute();
+}
+
+// 2. دالة الإسناد الفعلية (تمت إضافة حماية كاملة ضد الأخطاء)
+function executeAssignments(includeOldStudents) {
+    try {
+        closeOldStudentsAlert();
+        const status = document.getElementById('status-2');
+        const isEvenDistribution = document.getElementById('even-distribution').checked;
+        
+        document.getElementById('loader-2').style.display = 'inline-block';
+        document.getElementById('btnText-2').innerText = 'جارِ التوزيع...';
+
+        // أ- تصفير مقاعد الشعب الحالية بناءً على ملف SS01
+        for (let key in globalCRNDetails) {
+            globalCRNDetails[key].currentRemaining = globalCRNDetails[key].initialRemaining;
+        }
+
+        // ب- تصفير عدادات الرزم
+        packagesData.forEach(p => p.currentCount = 0);
+
+        // ج- عملية التوزيع على المتدربين
+        traineesData.forEach(trainee => {
+            trainee.assignedPackage = null;
+            trainee.assignedCRNs = [];
+
+            // استثناء القدامى إذا طُلب ذلك
+            if (!includeOldStudents && trainee.isOldStudent) return;
+
+            // جلب الرزم المتوافقة مع تخصص المتدرب
+            let availablePkgs = packagesData.filter(p => p.program === trainee.program);
+            
+            // التوزيع العادل (اختيار الرزمة الأقل عدداً)
+            if (isEvenDistribution) {
+                availablePkgs.sort((a, b) => a.currentCount - b.currentCount);
+            }
+
+            for (let pkg of availablePkgs) {
+                if (pkg.currentCount >= pkg.maxCapacity) continue;
+
+                // فحص توفر مقاعد في "كل" شعب الرزمة
+                let hasEnoughSeats = pkg.crns.every(crn => {
+                    let cleanCrn = String(crn).trim();
+                    let details = globalCRNDetails[cleanCrn];
+                    // إذا الشعبة موجودة ولديها مقاعد، أو إذا الشعبة غير موجودة أصلاً (نتجاوزها مع تنبيه لاحق)
+                    return !details || details.currentRemaining > 0;
+                });
+
+                if (hasEnoughSeats) {
+                    pkg.currentCount++;
+                    trainee.assignedPackage = pkg.id;
+                    trainee.assignedCRNs = [...pkg.crns]; // نسخ الأرقام للمتدرب
+                    
+                    // خصم المقاعد من الجدول
+                    pkg.crns.forEach(crn => {
+                        let cleanCrn = String(crn).trim();
+                        if (globalCRNDetails[cleanCrn]) {
+                            globalCRNDetails[cleanCrn].currentRemaining--;
+                        }
+                    });
+                    break; // تم الإسناد بنجاح لهذا المتدرب، انتقل للمتدرب التالي
+                }
+            }
+        });
+
+        // د- الانتهاء والانتقال للنتائج
+        setupPage3(); // تجهيز فلاتر الصفحة 3
+        saveSessionState(); // حفظ الحالة
+        
+        // الانتقال الفعلي للصفحة 3
+        document.getElementById('loader-2').style.display = 'none';
+        document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
+        switchPage('page-3');
+
+    } catch (error) {
+        console.error("خطأ أثناء الإسناد:", error);
+        document.getElementById('loader-2').style.display = 'none';
+        document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
+        alert("حدث خطأ تقني أثناء التوزيع. نأمل التحقق من بيانات الرزم. \n التفاصيل: " + error.message);
     }
 }
 

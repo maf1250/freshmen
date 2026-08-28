@@ -1657,7 +1657,9 @@ function executeAssignments(includeOldStudents) {
                 trainee.assignedPackage = pkg.id;
                 trainee.assignedCRNs = allRequestedCRNs;
                 allRequestedCRNs.forEach(crn => {
-                    globalCRNDetails[crn.trim()].currentRemaining--;
+                    if (globalCRNDetails[crn.trim()]) {
+                        globalCRNDetails[crn.trim()].currentRemaining--;
+                    }
                 });
                 break; 
             }
@@ -1671,79 +1673,25 @@ function executeAssignments(includeOldStudents) {
     switchPage('page-3');
 }
 
-    // دوال النوافذ الخاصة بالقدامى
-    function closeOldStudentsAlert() {
-        document.getElementById('old-students-alert-modal').style.display = 'none';
-    }
+// دوال النوافذ الخاصة بالقدامى
+function closeOldStudentsAlert() {
+    document.getElementById('old-students-alert-modal').style.display = 'none';
+}
 
-    function viewOldStudentsList() {
-        let tbody = document.getElementById('old-students-table-body');
-        tbody.innerHTML = '';
-        globalOldStudents.forEach(st => {
-            tbody.innerHTML += `<tr><td>${st.id}</td><td>${st.name}</td><td>${st.program}</td></tr>`;
-        });
-        document.getElementById('old-students-alert-modal').style.display = 'none';
-        document.getElementById('old-students-list-modal').style.display = 'flex';
-    }
+function viewOldStudentsList() {
+    let tbody = document.getElementById('old-students-table-body');
+    tbody.innerHTML = '';
+    globalOldStudents.forEach(st => {
+        tbody.innerHTML += `<tr><td>${st.id}</td><td>${st.name}</td><td>${st.program}</td></tr>`;
+    });
+    document.getElementById('old-students-alert-modal').style.display = 'none';
+    document.getElementById('old-students-list-modal').style.display = 'flex';
+}
 
-    function closeOldStudentsList() {
-        document.getElementById('old-students-list-modal').style.display = 'none';
-        document.getElementById('old-students-alert-modal').style.display = 'flex'; // إعادة نافذة القرار
-    }
-
-          traineesData.forEach(t => {
-            t.assignedPackage = null;
-            t.assignedCRNs = [];
-        });
-
-        let isEvenDistribution = document.getElementById('even-distribution').checked;
-
-        // التوزيع الآلي
-        traineesData.forEach(trainee => {
-            // تخطي المتدرب القديم إذا اختار المستخدم استثنائهم
-            if (!includeOldStudents && trainee.isOldStudent) return;
-
-            let availablePkgs = packagesData.filter(p => p.program === trainee.program);
-            
-            if (isEvenDistribution) {
-                availablePkgs.sort((a, b) => a.currentCount - b.currentCount);
-            }
-
-            for (let pkg of availablePkgs) {
-                if (pkg.currentCount >= pkg.maxCapacity) continue;
-
-                let hasEnoughSeatsInCRNs = true;
-                for (let crn of pkg.crns) {
-                    let cleanCrn = crn.trim();
-                    if (globalCRNDetails[cleanCrn] && globalCRNDetails[cleanCrn].currentRemaining <= 0) {
-                        hasEnoughSeatsInCRNs = false;
-                        break; 
-                    }
-                }
-
-                if (!hasEnoughSeatsInCRNs) continue; 
-
-                pkg.currentCount++;
-                trainee.assignedPackage = pkg.id;
-                trainee.assignedCRNs = pkg.crns;
-                
-                pkg.crns.forEach(crn => {
-                    let cleanCrn = crn.trim();
-                    if (globalCRNDetails[cleanCrn]) {
-                        globalCRNDetails[cleanCrn].currentRemaining--;
-                    }
-                });
-                
-                break; 
-            }
-        });
-
-        setupPage3();
-        document.getElementById('loader-2').style.display = 'none';
-        document.getElementById('btnText-2').innerText = 'تنفيذ الإسناد وعرض النتائج';
-        saveSessionState();
-        switchPage('page-3');
-    }
+function closeOldStudentsList() {
+    document.getElementById('old-students-list-modal').style.display = 'none';
+    document.getElementById('old-students-alert-modal').style.display = 'flex'; 
+}
 
     function setupPage3() {
         const filterSelect = document.getElementById('result-program-filter');

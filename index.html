@@ -980,6 +980,12 @@ function handleCRNInput(event, pkgId) {
         if (!globalCRNDetails[cleanCrn]) {
             return 'red'; // غير موجود في SS01
         }
+
+        // --- 1. فحص هل المقرر ضمن الدراسات العامة المخصصة لهذا التخصص ---
+        // هذا الفحص يضمن ظهور المقررات التي اخترتها يدوياً باللون الأخضر
+        if (programGSMapping[prog] && programGSMapping[prog].includes(cleanCrn)) {
+            return 'green';
+        }
         
         let rawCourse = globalCRNDetails[cleanCrn].course || '';
         let rawName = globalCRNDetails[cleanCrn].name || '';
@@ -987,7 +993,7 @@ function handleCRNInput(event, pkgId) {
         let normCourse = globalNormalizeCode(rawCourse + rawName);
         let normRawOnly = globalNormalizeCode(rawCourse);
 
-        // --- 1. المطابقة الذكية لاسم التخصص (Fuzzy Matching) ---
+        // --- 2. المطابقة الذكية لاسم التخصص (Fuzzy Matching) ---
         let planData = null;
         if (prog && Object.keys(dynamicSC04Plan).length > 0) {
             let programClean = prog.trim();
@@ -1003,7 +1009,7 @@ function handleCRNInput(event, pkgId) {
             }
         }
         
-        // --- 2. التحقق من وجود المقرر في خطة المستوى الأول ---
+        // --- 3. التحقق من وجود المقرر في خطة المستوى الأول ---
         if (planData) {
             let planCourses = Array.from(planData.courses);
             let isLevel1 = planCourses.some(planCourse => {
@@ -1014,28 +1020,26 @@ function handleCRNInput(event, pkgId) {
                 
                 // ب- المطابقة المتقدمة لمعالجة اختلاف الترتيب (مثل 101عرب مقابل عرب101)
                 let extractAlphaNum = (text) => {
-                    let nums = text.replace(/[^0-9]/g, ''); // سحب الأرقام فقط
-                    let chars = text.replace(/[0-9]/g, ''); // سحب الحروف فقط
+                    let nums = text.replace(/[^0-9]/g, ''); 
+                    let chars = text.replace(/[0-9]/g, ''); 
                     return { nums, chars };
                 };
                 
                 let planParts = extractAlphaNum(normPlan);
                 let crnParts = extractAlphaNum(normRawOnly);
                 
-                // التحقق: إذا كانت الأرقام متطابقة، والحروف متطابقة أو متداخلة
                 if (planParts.nums && crnParts.nums && planParts.nums === crnParts.nums) {
                     if (planParts.chars.includes(crnParts.chars) || crnParts.chars.includes(planParts.chars)) {
                         return true;
                     }
                 }
-                
                 return false;
             });
             
-            if (isLevel1) return 'green'; // متطابق مع المستوى الأول
+            if (isLevel1) return 'green'; 
         }
         
-        return 'orange'; // موجود في الجدول لكنه لم يتطابق مع المستوى الأول لهذا التخصص
+        return 'orange'; 
     }
     
        function removeCRNTag(element, pkgId) {
@@ -1554,33 +1558,30 @@ function processAssignments() {
     }
 }
 
-// 3. دالة فتح نافذة الدراسات العامة وبنائها
+// دالة لفتح نافذة الدراسات العامة وبنائها
 function openGSModal() {
     const container = document.getElementById('gs-programs-container');
     container.innerHTML = '';
     
-    let optionsHtml = `<option value="">-- اختر شعبة دراسات عامة لإضافتها --</option>`;
-    if (window.globalGeneralStudiesOptions) {
-        window.globalGeneralStudiesOptions.forEach(opt => {
-            optionsHtml += `<option value="${opt.crn}">${opt.label}</option>`;
-        });
-    }
-
     uniquePrograms.forEach((prog, index) => {
         let card = document.createElement('div');
         card.className = 'package-card';
         card.style.margin = '0';
         card.style.padding = '10px';
         card.style.border = '1px solid var(--primary)';
+        
+        // بناء الهيكل الداخلي للكارت
         card.innerHTML = `
             <h4 style="margin:0 0 10px 0; font-size:13px; color:var(--primary); border-bottom:1px dashed #ccc; padding-bottom:5px;">${prog}</h4>
-            <select onchange="addGSTag('${prog}', this.value, ${index})" style="width:100%; padding:5px; font-size:12px;">
-                ${optionsHtml}
-            </select>
+            <div id="gs-select-container-${index}">
+                <!-- سيتم تعبئة القائمة هنا عبر دالة منفصلة -->
+            </div>
             <div id="gs-tags-${index}" class="crn-tags-container" style="margin-top:10px; gap:5px;"></div>
         `;
         container.appendChild(card);
         
+        // رسم القائمة المنسدلة والتاجز المحفوظة
+        renderGSSelect(prog, index);
         if (programGSMapping[prog]) {
             programGSMapping[prog].forEach(crn => renderGSTag(prog, crn, index));
         }
@@ -1590,13 +1591,42 @@ function openGSModal() {
     document.body.style.overflow = 'hidden';
 }
 
-// دالة مساعدة لإضافة التاج للدراسات العامة
+// دالة لرسم القائمة المنسدلة (Dropdown) مع فلترة العناصر المختارة
+function renderGSSelect(prog, index) {
+    const selectContainer = document.getElementById(`gs-select-container-${index}`);
+    let selectedCrns = programGSMapping[prog] || [];
+    
+    let html = `<select onchange="addGSTag('${prog}', this.value, ${index})" style="width:100%; padding:5px; font-size:12px;">
+                <option value="">-- اختر شعبة دراسات عامة --</option>`;
+    
+    if (window.globalGeneralStudiesOptions) {
+        window.globalGeneralStudiesOptions.forEach(opt => {
+            // إخفاء المقرر إذا كان مختاراً مسبقاً في هذا التخصص فقط
+            if (!selectedCrns.includes(opt.crn)) {
+                html += `<option value="${opt.crn}">${opt.label}</option>`;
+            }
+        });
+    }
+    html += `</select>`;
+    selectContainer.innerHTML = html;
+}
+
+// إضافة مقرر وتحديث القائمة
 function addGSTag(prog, crn, index) {
     if (!crn) return;
     if (!programGSMapping[prog]) programGSMapping[prog] = [];
     if (programGSMapping[prog].includes(crn)) return;
+    
     programGSMapping[prog].push(crn);
-    renderGSTag(prog, crn, index);
+    renderGSTag(prog, crn, index); // رسم التاج
+    renderGSSelect(prog, index);   // إعادة رسم القائمة لإخفاء العنصر المختار
+}
+
+// حذف مقرر وتحديث القائمة
+function removeGSTag(prog, crn, element, index) {
+    programGSMapping[prog] = programGSMapping[prog].filter(c => c !== crn);
+    element.parentElement.remove(); // إزالة التاج من الواجهة
+    renderGSSelect(prog, index);   // إعادة رسم القائمة لإظهار العنصر المحذوف مجدداً
 }
 
 // دالة مساعدة لرسم التاج
@@ -1606,14 +1636,9 @@ function renderGSTag(prog, crn, index) {
     tag.className = 'crn-tag green'; 
     tag.style.fontSize = '11px';
     tag.style.padding = '2px 8px';
-    tag.innerHTML = `<span>${crn}</span> <span class="remove" onclick="removeGSTag('${prog}', '${crn}', this)">✖</span>`;
+    // إضافة الـ index للدالة لكي نعرف أي قائمة نحدثها عند الحذف
+    tag.innerHTML = `<span>${crn}</span> <span class="remove" onclick="removeGSTag('${prog}', '${crn}', this, ${index})">✖</span>`;
     container.appendChild(tag);
-}
-
-// دالة مساعدة لحذف التاج
-function removeGSTag(prog, crn, element) {
-    programGSMapping[prog] = programGSMapping[prog].filter(c => c !== crn);
-    element.parentElement.remove();
 }
 
 //  دالة فحص المتدربين القدامى
@@ -1655,7 +1680,7 @@ function executeAssignments(includeOldStudents) {
     // تصفير عداد الرزم
     packagesData.forEach(p => p.currentCount = 0);
 
-   traineesData.forEach(trainee => {
+  traineesData.forEach(trainee => {
         trainee.assignedPackage = null;
         trainee.assignedCRNs = [];
 
@@ -1667,19 +1692,21 @@ function executeAssignments(includeOldStudents) {
         for (let pkg of availablePkgs) {
             if (pkg.currentCount >= pkg.maxCapacity) continue;
 
+            // التحقق من المقاعد
             let hasEnoughSeats = pkg.crns.every(crn => {
-                let cleanCrn = crn.trim();
-                return globalCRNDetails[cleanCrn] && globalCRNDetails[cleanCrn].currentRemaining > 0;
+                let c = String(crn).trim();
+                return globalCRNDetails[c] && globalCRNDetails[c].currentRemaining > 0;
             });
 
             if (hasEnoughSeats) {
                 pkg.currentCount++;
                 trainee.assignedPackage = pkg.id;
-                trainee.assignedCRNs = [...pkg.crns]; // الرزمة جاهزة
+                // تأكد من استخدام نسخة من المصفوفة لضمان عدم حدوث تداخل
+                trainee.assignedCRNs = [...pkg.crns]; 
+                
                 pkg.crns.forEach(crn => {
-                    if (globalCRNDetails[crn.trim()]) {
-                        globalCRNDetails[crn.trim()].currentRemaining--;
-                    }
+                    let c = String(crn).trim();
+                    if (globalCRNDetails[c]) globalCRNDetails[c].currentRemaining--;
                 });
                 break; 
             }

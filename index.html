@@ -661,8 +661,7 @@ async function getFromDB(key) {
         });
     });
     
-    // الانتقال للصفحة الثانية
-   async function goToPage2() {
+async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
         const ss01File = document.getElementById('ss01File').files[0];
         const status = document.getElementById('status-1');
@@ -678,67 +677,46 @@ async function getFromDB(key) {
             const colName = document.getElementById('col_sp15_name').value.trim();
             const colProgram = document.getElementById('col_sp15_program').value.trim();
             
-            // استخراج بيانات SS01 للجدول العرضي وحساب الساعات
+            globalCRNDetails = {};
             let globalGeneralStudiesOptions = [];
+
             if (ss01File) {
                 let rawSS01 = await readExcelFile(ss01File);
                 const colCrn = document.getElementById('col_ss01_crn').value.trim();
                 const colCourse = document.getElementById('col_ss01_course').value.trim();
-                const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
-                const colCourseName = document.getElementById('col_ss01_course_name') ? document.getElementById('col_ss01_course_name').value.trim() : 'اسم المقرر';
-                const colRem = document.getElementById('col_ss01_remaining') ? document.getElementById('col_ss01_remaining').value.trim() : 'متبقي';
-                const colInstructor = document.getElementById('col_ss01_instructor') ? document.getElementById('col_ss01_instructor').value.trim() : 'اسم المدرب';
-                const colRoom = document.getElementById('col_ss01_room') ? document.getElementById('col_ss01_room').value.trim() : 'قاعة';
-
-                globalCRNDetails = {};
-                if (ss01File) {
-                let rawSS01 = await readExcelFile(ss01File);
-                const colCrn = document.getElementById('col_ss01_crn').value.trim();
-                const colCourse = document.getElementById('col_ss01_course').value.trim();
-                const colHours = document.getElementById('col_ss01_hours') ? document.getElementById('col_ss01_hours').value.trim() : 'الساعات المعتمدة';
-                const colCourseName = document.getElementById('col_ss01_course_name') ? document.getElementById('col_ss01_course_name').value.trim() : 'اسم المقرر';
-                const colRem = document.getElementById('col_ss01_remaining') ? document.getElementById('col_ss01_remaining').value.trim() : 'متبقي';
-                const colInstructor = document.getElementById('col_ss01_instructor') ? document.getElementById('col_ss01_instructor').value.trim() : 'اسم المدرب';
-                const colRoom = document.getElementById('col_ss01_room') ? document.getElementById('col_ss01_room').value.trim() : 'قاعة';
-
-                globalCRNDetails = {};
-                globalGeneralStudiesOptions = []; // تصفير القائمة عند كل معالجة جديدة لملف SS01
+                const colHours = document.getElementById('col_ss01_hours').value.trim() || 'الساعات المعتمدة';
+                const colCourseName = document.getElementById('col_ss01_course_name').value.trim() || 'اسم المقرر';
+                const colRem = document.getElementById('col_ss01_remaining').value.trim() || 'متبقي';
+                const colInstructor = document.getElementById('col_ss01_instructor').value.trim() || 'اسم المدرب';
+                const colRoom = document.getElementById('col_ss01_room').value.trim() || 'قاعة';
 
                 rawSS01.forEach(row => {
-                    let crn = String(row[colCrn]).trim();
+                    let crn = String(row[colCrn] || '').trim();
                     if (crn && crn !== 'undefined' && crn !== "") {
-                        let currentHours = parseFloat(row[colHours] || row['الساعات المعتمدة'] || 0);
+                        let currentHours = parseFloat(row[colHours] || 0);
                         let timeStr = row['الوقت'] || row['Time'] || 'غير محدد';
                         let daysStr = row['اليوم'] || row['Days'] || 'غير محدد';
-                        let remCap = parseInt(row[colRem] || row['المتبقي'] || row['متبقي'] || 0);
+                        let remCap = parseInt(row[colRem] || 0);
                         
-                        // --- إضافة منطق جمع مواد الدراسات العامة ---
-                        let department = row['القسم'] || '';
+                        let department = String(row['القسم'] || '');
                         if (department.includes('الدراسات العامة')) {
-                            // التحقق من عدم تكرار الرقم في القائمة المنسدلة
                             if (!globalGeneralStudiesOptions.find(o => o.crn === crn)) {
-                                let cName = row[colCourseName] || row['اسم المقرر'] || '';
-                                let inst = row[colInstructor] || row['اسم المدرب'] || 'غير محدد';
-                                globalGeneralStudiesOptions.push({
-                                    crn: crn,
-                                    label: `${crn} - ${cName} (${inst})`
-                                });
+                                let cName = row[colCourseName] || '';
+                                let inst = row[colInstructor] || 'غير محدد';
+                                globalGeneralStudiesOptions.push({ crn: crn, label: `${crn} - ${cName} (${inst})` });
                             }
                         }
 
                         if (!globalCRNDetails[crn]) {
-                            let instructorName = row[colInstructor] || row['اسم المدرب'] || row['المدرب'] || row['المدرس'] || 'غير محدد';
-                            let roomNum = row[colRoom] || row['القاعة'] || row['قاعة'] || row['غرفة'] || '-';
-
                             globalCRNDetails[crn] = {
-                                course: row[colCourse] || row['المقرر'] || row['رمز المقرر'] || '-',
-                                name: row[colCourseName] || row['اسم المقرر'] || '',
+                                course: row[colCourse] || '-',
+                                name: row[colCourseName] || '',
                                 type: row['نوع الشعبة'] || row['نوع الجدولة'] || '', 
                                 hours: currentHours, 
                                 initialRemaining: isNaN(remCap) ? 0 : remCap, 
                                 currentRemaining: isNaN(remCap) ? 0 : remCap,
-                                instructor: instructorName,
-                                room: roomNum,
+                                instructor: row[colInstructor] || 'غير محدد',
+                                room: row[colRoom] || '-',
                                 parts: [] 
                             };
                         } else {
@@ -751,27 +729,28 @@ async function getFromDB(key) {
                         }
                     }
                 });
+                window.globalGeneralStudiesOptions = globalGeneralStudiesOptions;
             }
 
-            // معالجة ملف ارتباط الشعب SF33 (إن وُجد)
+            // معالجة ملف ارتباط الشعب SF33
             const sf33File = document.getElementById('sf33File').files[0];
             globalLinkedCRNs = {};
             if (sf33File) {
                 let rawSF33 = await readExcelFile(sf33File);
                 const colCrn1 = document.getElementById('col_sf33_crn1').value.trim();
                 const colCrn2 = document.getElementById('col_sf33_crn2').value.trim();
-
                 rawSF33.forEach(row => {
-                    let c1 = String(row[colCrn1]).trim();
-                    let c2 = String(row[colCrn2]).trim();
-                    if (c1 && c2 && c1 !== 'undefined' && c2 !== 'undefined') {
+                    let c1 = String(row[colCrn1] || '').trim();
+                    let c2 = String(row[colCrn2] || '').trim();
+                    if (c1 && c2) {
                         if (!globalLinkedCRNs[c1]) globalLinkedCRNs[c1] = new Set();
                         if (!globalLinkedCRNs[c2]) globalLinkedCRNs[c2] = new Set();
                         globalLinkedCRNs[c1].add(c2);
-                        globalLinkedCRNs[c2].add(c1); // ارتباط متبادل
+                        globalLinkedCRNs[c2].add(c1);
                     }
                 });
             }
+
             // معالجة ملفات الخطة SC04
             const sc04Input = document.getElementById('sc04File');
             dynamicSC04Plan = {};
@@ -781,60 +760,32 @@ async function getFromDB(key) {
             if (isSc04Attached) {
                 const colProgSc04 = document.getElementById('col_sc04_program').value.trim();
                 const colCourseSc04 = document.getElementById('col_sc04_course').value.trim();
-                
                 const parseNumber = (val) => {
                     if (!val) return 0;
                     let v = String(val).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d));
                     return parseFloat(v) || 0;
                 };
 
-                const normalizeCode = (code) => {
-                    if (!code) return '';
-                    return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').toLowerCase();
-                };
-
                 for (let i = 0; i < sc04Input.files.length; i++) {
                     let file = sc04Input.files[i];
                     let rawSC04 = await readExcelFile(file);
-
                     rawSC04.forEach(row => {
-                        let prog = row[colProgSc04] || row['التخصص'];
-                        let course = row[colCourseSc04] || row['المقرر'] || row['رمز المقرر'];
+                        let prog = row[colProgSc04];
+                        let course = row[colCourseSc04];
+                        let levelValue = String(row['الفصل التدريبي'] || row['المستوى'] || '');
                         
-                        let levelValue = row['الفصل التدريبي_1'] || row['الفصل التدريبي'] || row['المستوى'] || '';
-                        let v = String(levelValue).trim();
-                        
-                        let isLevel1 = false;
-                        if ((v.includes('1') || v.includes('١') || v.includes('أول') || v.includes('اول')) && 
-                            !v.includes('2') && !v.includes('٢') && !v.includes('ثاني') && !v.includes('3') && !v.includes('4')) {
-                            if (!v.includes('144') && !v.includes('145')) {
-                                isLevel1 = true;
-                            }
-                        }
-                        
-                        if (prog && course && isLevel1) {
+                        if (prog && course && (levelValue.includes('1') || levelValue.includes('١') || levelValue.includes('أول'))) {
                             let cleanProg = prog.trim();
                             let cleanCourse = course.trim();
-                            let normCourse = normalizeCode(cleanCourse); 
+                            let normCourse = globalNormalizeCode(cleanCourse); 
                             
-                             if (!dynamicSC04Plan[cleanProg]) {
-                                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0 };
-                            }
+                            if (!dynamicSC04Plan[cleanProg]) dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0 };
                             
                             if (!dynamicSC04Plan[cleanProg].courses.includes(cleanCourse)) {
                                 dynamicSC04Plan[cleanProg].courses.push(cleanCourse);
-                                
-                                let theoryRaw = row['مح'] || row['سم'] || row['نظري'] || 0;
-                                let practicalRaw = row['عم'] || row['ثم'] || row['عملي'] || 0;
-                                
-                                let theory = parseNumber(theoryRaw);
-                                let practical = parseNumber(practicalRaw);
-                                
-                                let parts = 1; 
-                                if (theory > 0 && practical > 0) {
-                                    parts = 2; 
-                                }
-                                
+                                let theory = parseNumber(row['مح'] || row['نظري'] || 0);
+                                let practical = parseNumber(row['عم'] || row['عملي'] || 0);
+                                let parts = (theory > 0 && practical > 0) ? 2 : 1;
                                 dynamicSC04Plan[cleanProg].requiredParts += parts;
                                 window.globalCourseRequirements[normCourse] = parts;
                             }
@@ -842,7 +793,6 @@ async function getFromDB(key) {
                     });
                 }
             }
-           
             
             let rawSP15 = await readExcelFile(sp15File);
             traineesData = [];
@@ -850,14 +800,12 @@ async function getFromDB(key) {
             let seenIds = new Set(); 
             
             rawSP15.forEach(row => {
-                let id = String(row[colId]).trim();
-                let name = row[colName] || row['الاسم'] || row['الاسم'] || row['إسم المتدرب'] || row['Name'] || '';
+                let id = String(row[colId] || '').trim();
+                let name = row[colName] || '';
                 let prog = row[colProgram];
-                
-                // التحقق من وجود الرقم وعدم تكراره
                 if (id && !seenIds.has(id)) {
-                    seenIds.add(id); // تسجيل الرقم كـ "مقروء"
-                    traineesData.push({ id: id, name: name.toString().trim(), program: (prog || 'غير محدد').trim() });
+                    seenIds.add(id);
+                    traineesData.push({ id: id, name: name.trim(), program: (prog || 'غير محدد').trim() });
                     if (prog) programsSet.add(prog.trim());
                 }
             });
@@ -867,8 +815,10 @@ async function getFromDB(key) {
 
             showPreValidationDashboard();
 
-        } catch (error) { status.innerText = error.message; } 
-        finally {
+        } catch (error) { 
+            status.innerText = "خطأ: " + error.message; 
+            console.error(error);
+        } finally {
             document.getElementById('loader-1').style.display = 'none';
             document.getElementById('btnText-1').innerText = 'التالي: إعداد وبناء الرزم';
         }

@@ -141,6 +141,35 @@
         #scrollToTopBtn svg { width: 24px; height: 24px; }
         #scrollToTopBtn.show { opacity: 1; visibility: visible; transform: translateY(0); }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* ستايل بطاقة إضافة رزمة جديدة */
+.add-package-card {
+    background: transparent;
+    border: 2px dashed var(--primary);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    min-height: 200px;
+    color: var(--primary);
+    gap: 10px;
+}
+.add-package-card:hover {
+    background: var(--primary-subtle);
+    transform: scale(1.02);
+}
+.add-package-card svg {
+    width: 50px;
+    height: 50px;
+    fill: var(--primary);
+}
+.add-package-card span {
+    font-weight: 800;
+    font-size: 18px;
+}
         
         /* ستايل النافذة المنبثقة للجدول العرضي */
 .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.6); z-index: 100000; display: none; justify-content: center; align-items: center; backdrop-filter: blur(3px); }
@@ -423,7 +452,11 @@
         <div class="packages-header" style="flex-wrap: wrap; gap: 15px; background: var(--bg-elevated); border: 1px solid var(--border-strong);">
             <div style="display: flex; align-items: center; gap: 10px; color: var(--primary);">
                 <strong>عدد الرزم:</strong>
-                <input type="number" id="num-packages" min="1" max="80" value="1" onchange="handleNumPackagesChange()" style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px;">            </div>
+                <input type="number" id="num-packages" min="1" max="200" value="1" 
+       oninput="handleNumPackagesChange()" 
+       onchange="handleNumPackagesChange()" 
+       style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px; font-weight: bold; text-align: center;">
+            </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                 <button onclick="openAutoGenModal()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#d68910'" onmouseout="this.style.backgroundColor='#f39c12'">
                      توليد الرزم تلقائيًا
@@ -1008,7 +1041,6 @@ function handleCRNInput(event, pkgId) {
         savePackagesToLocal();
     }
 
-    // 1. دالة حفظ البيانات من الشاشة إلى الذاكرة
     function savePackagesToLocal() {
         const num = parseInt(document.getElementById('num-packages').value) || 1;
         let pkgs = [];
@@ -1026,54 +1058,130 @@ function handleCRNInput(event, pkgId) {
         }
     }
 
-    // 2. دالة التعامل مع تغيير عدد الرزم (تحفظ الموجود ثم تعيد البناء)
-    function handleNumPackagesChange() {
-        savePackagesToLocal(); 
-        loadPackagesFromLocal();
+  // 1. دالة إضافة رزمة جديدة عبر الزر (+)
+function addNewPackage() {
+    const numInput = document.getElementById('num-packages');
+    let currentNum = parseInt(numInput.value) || 0;
+    numInput.value = currentNum + 1;
+    handleNumPackagesChange();
+    showToast("➕ تم إضافة رزمة جديدة");
+}
+
+// 2. معالجة تغيير عدد الرزم من الخانة اليدوية
+function handleNumPackagesChange() {
+    const numInput = document.getElementById('num-packages');
+    let num = parseInt(numInput.value);
+    
+    // تحديد حدود منطقية
+    if (isNaN(num) || num < 1) num = 1;
+    if (num > 100) num = 100;
+    numInput.value = num;
+
+    savePackagesToLocal(); // حفظ البيانات الحالية قبل إعادة الرسم
+    generatePackageCards(); // إعادة بناء البطاقات
+    fillPackageData(); // تعبئة البيانات المحفوظة في البطاقات الجديدة
+}
+
+// 3. بناء هيكل كروت الرزم مع زر الإضافة
+function generatePackageCards() {
+    const numInput = document.getElementById('num-packages');
+    const num = parseInt(numInput.value) || 1;
+    const container = document.getElementById('packages-container');
+
+    container.innerHTML = ''; // مسح القديم
+    let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    for (let i = 1; i <= num; i++) {
+        let card = document.createElement('div');
+        card.className = 'package-card';
+        card.innerHTML = `
+            <h3>
+                <span>📦 رزمة رقم ${i}</span>
+                <button onclick="deletePackage(${i})" title="حذف هذه الرزمة" style="background: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;">✖</button>
+            </h3>
+            <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>التخصص المستهدف:</label>
+                    <select id="pkg-program-${i}" onchange="revalidatePackageTags(${i})" style="width: max-content; min-width: 200px;">
+                        <option value="" disabled selected>-- اختر التخصص --</option>
+                        ${programOptions}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>السعة القصوى:</label>
+                    <input type="number" id="pkg-capacity-${i}" min="1" max="500" value="20" onchange="savePackagesToLocal()" style="width: 100px; text-align: center;">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>الأرقام المرجعية:</label>
+                <input type="hidden" id="pkg-crns-${i}">
+                <input type="text" id="pkg-crns-input-${i}" placeholder="اكتب الرقم ثم Enter" onkeydown="handleCRNInput(event, ${i})">
+                <div id="pkg-crns-tags-${i}" class="crn-tags-container"></div>
+            </div>
+        `;
+        container.appendChild(card);
     }
 
-    // 3. دالة بناء هيكل كروت الرزم (HTML فقط بدون بيانات)
-    function generatePackageCards() {
-        const numInput = document.getElementById('num-packages');
-        const num = parseInt(numInput.value) || 1;
-        const container = document.getElementById('packages-container');
+    // إضافة بطاقة "إضافة رزمة" في النهاية
+    let addBtnCard = document.createElement('div');
+    addBtnCard.className = 'add-package-card';
+    addBtnCard.onclick = addNewPackage;
+    addBtnCard.innerHTML = `
+        <svg viewBox="0 0 24 24"><path d="M19,13H13V19H11V13H5V11H11V5H13V11H19V13Z" /></svg>
+        <span>إضافة رزمة جديدة</span>
+    `;
+    container.appendChild(addBtnCard);
+}
 
-        container.innerHTML = ''; // مسح القديم
-        let programOptions = uniquePrograms.map(p => `<option value="${p}">${p}</option>`).join('');
-
-        for (let i = 1; i <= num; i++) {
-            let card = document.createElement('div');
-            card.className = 'package-card';
-            card.innerHTML = `
-                <h3>
-                    <span>📦 رزمة رقم ${i}</span>
-                    <button onclick="deletePackage(${i})" title="حذف هذه الرزمة" style="background: rgba(220, 53, 69, 0.1); border: 1px solid #dc3545; color: #dc3545; border-radius: 50%; width: 28px; height: 28px; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: 0.2s;" onmouseover="this.style.background='#dc3545'; this.style.color='#fff';" onmouseout="this.style.background='rgba(220, 53, 69, 0.1)'; this.style.color='#dc3545';">✖</button>
-                </h3>
-                <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; gap: 20px;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label>التخصص المستهدف:</label>
-                        <select id="pkg-program-${i}" onchange="revalidatePackageTags(${i})" style="width: max-content; min-width: 200px;">
-                            <option value="" disabled selected>-- اختر التخصص --</option>
-                            ${programOptions}
-                        </select>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label>السعة القصوى:</label>
-                        <input type="number" id="pkg-capacity-${i}" min="1" max="500" value="20" onkeypress="return event.charCode >= 48 && event.charCode <= 57" oninput="this.value = this.value.replace(/[^0-9]/g, '')" onchange="savePackagesToLocal()" style="width: 100px; text-align: center;">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label>الأرقام المرجعية:</label>
-                    <input type="hidden" id="pkg-crns-${i}" onchange="savePackagesToLocal()">
-                    <input type="text" id="pkg-crns-input-${i}" placeholder="نأمل كتابة رقم أو عدة أرقام مرجعية ثم اضغط Enter أو مسافة" onkeydown="handleCRNInput(event, ${i})">
-                    <div id="pkg-crns-tags-${i}" class="crn-tags-container"></div>
-                </div>
-            `;
-            container.appendChild(card);
-        }
+// 4. دالة مساعدة لتعبئة البيانات بعد إعادة الرسم
+function fillPackageData() {
+    let savedPkgsRaw = localStorage.getItem('savedPackages');
+    if (savedPkgsRaw) {
+        let savedPkgs = JSON.parse(savedPkgsRaw);
+        savedPkgs.forEach(pkg => {
+            let progEl = document.getElementById(`pkg-program-${pkg.id}`);
+            let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
+            let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
+            
+            if (progEl) progEl.value = pkg.prog || "";
+            if (capEl) capEl.value = pkg.cap || 20;
+            if (crnsHiddenEl) {
+                crnsHiddenEl.value = pkg.crns || "";
+                let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
+                if(container) {
+                    container.innerHTML = '';
+                    let crnsArray = (pkg.crns || "").split(/[\s,،]+/).filter(c => c.trim() !== "");
+                    crnsArray.forEach(c => addCRNTag(c, pkg.id, true));
+                }
+            }
+        });
     }
+}
 
-    // 4. دالة الاسترجاع (تبني الهيكل ثم تعبئه بالبيانات فوراً وبشكل متزامن)
+// 5. تحديث دالة الحذف لضمان تزامن العداد
+function deletePackage(pkgIdToRemove) {
+    if (!confirm(`هل أنت متأكد من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
+
+    savePackagesToLocal();
+    let currentPackages = JSON.parse(localStorage.getItem('savedPackages')) || [];
+    currentPackages.splice(pkgIdToRemove - 1, 1);
+    
+    // إعادة ترتيب المعرفات
+    currentPackages.forEach((pkg, index) => pkg.id = index + 1);
+    
+    let newNum = currentPackages.length;
+    if (newNum < 1) newNum = 1;
+
+    document.getElementById('num-packages').value = newNum;
+    localStorage.setItem('numPackages', newNum);
+    localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
+    
+    handleNumPackagesChange(); // إعادة الرسم بالعدد الجديد
+    showToast("🗑️ تم حذف الرزمة");
+}
+
+ 
+
     function loadPackagesFromLocal() {
         let savedNum = localStorage.getItem('numPackages');
         let savedPkgsRaw = localStorage.getItem('savedPackages');
@@ -1111,32 +1219,7 @@ function handleCRNInput(event, pkgId) {
         }
     }
 
-    // 5. دالة حذف الرزمة
-    function deletePackage(pkgIdToRemove) {
-        if (!confirm(`هل أنت متأكد/ـة من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
-
-        savePackagesToLocal(); // حفظ الوضع الحالي قبل الحذف
-        let currentPackages = JSON.parse(localStorage.getItem('savedPackages')) || [];
-        
-        currentPackages.splice(pkgIdToRemove - 1, 1); // إزالة الرزمة
-        
-        if (currentPackages.length === 0) {
-            currentPackages.push({ id: 1, prog: "", cap: "20", crns: "" });
-        }
-        
-        currentPackages.forEach((pkg, index) => {
-            pkg.id = index + 1; // ترتيب الأرقام مجدداً
-        });
-        
-        let newNum = currentPackages.length;
-        document.getElementById('num-packages').value = newNum;
-        localStorage.setItem('numPackages', newNum);
-        localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
-        
-        loadPackagesFromLocal(); // إعادة بناء الشاشة بعد الحذف
-        showToast("🗑️ تم حذف الرزمة بنجاح");
-        saveSessionState();
-    }
+  
 
     // دالة حذف جميع الرزم دفعة واحدة
     function deleteAllPackages() {

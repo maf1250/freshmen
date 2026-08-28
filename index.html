@@ -3092,66 +3092,6 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
         return [...new Set(errors)];
     }
 
-    let programGSMapping = {}; // لتخزين التخصص والمواد المختارة له
-
-function openGSModal() {
-    const container = document.getElementById('gs-programs-container');
-    container.innerHTML = '';
-    
-    // خيارات الدراسات العامة المتاحة من SS01
-    let optionsHtml = `<option value="">-- اختر شعبة لإضافتها --</option>`;
-    globalGeneralStudiesOptions.forEach(opt => {
-        optionsHtml += `<option value="${opt.crn}">${opt.label}</option>`;
-    });
-
-    uniquePrograms.forEach((prog, index) => {
-        let card = document.createElement('div');
-        card.className = 'package-card';
-        card.style.margin = '0';
-        card.innerHTML = `
-            <h4 style="margin:0 0 10px 0; font-size:14px; color:var(--primary); border-bottom:1px solid #eee; padding-bottom:5px;">${prog}</h4>
-            <select onchange="addGSTag('${prog}', this.value, ${index})" style="width:100%; padding:5px;">
-                ${optionsHtml}
-            </select>
-            <div id="gs-tags-${index}" class="crn-tags-container" style="margin-top:10px;"></div>
-        `;
-        container.appendChild(card);
-        
-        // استعادة الاختيارات السابقة إذا وجدت
-        if (programGSMapping[prog]) {
-            programGSMapping[prog].forEach(crn => renderGSTag(prog, crn, index));
-        }
-    });
-
-    document.getElementById('gs-modal').style.display = 'flex';
-}
-
-function addGSTag(prog, crn, index) {
-    if (!crn) return;
-    if (!programGSMapping[prog]) programGSMapping[prog] = [];
-    if (programGSMapping[prog].includes(crn)) return;
-
-    programGSMapping[prog].push(crn);
-    renderGSTag(prog, crn, index);
-}
-
-function renderGSTag(prog, crn, index) {
-    const container = document.getElementById(`gs-tags-${index}`);
-    let tag = document.createElement('div');
-    tag.className = 'crn-tag green';
-    tag.innerHTML = `<span>${crn}</span> <span class="remove" onclick="removeGSTag('${prog}', '${crn}', this)">✖</span>`;
-    container.appendChild(tag);
-}
-
-function removeGSTag(prog, crn, element) {
-    programGSMapping[prog] = programGSMapping[prog].filter(c => c !== crn);
-    element.parentElement.remove();
-}
-
-function confirmGeneralStudies() {
-    document.getElementById('gs-modal').style.display = 'none';
-    executeAssignments(true); // المتابعة لعملية التوزيع الفعلي
-}
     
 </script>
 

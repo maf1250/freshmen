@@ -1377,14 +1377,12 @@ function startAutoGenerate() {
     autoGeneratePackages(cap); 
 }
 
-// 4. خوارزمية التوليد التلقائي الذكي (النسخة الكاملة والمصححة)
 function autoGeneratePackages(defaultCap) {
     let generatedPackages = [];
     let aiLog = []; 
     let excludePhysics = document.getElementById('exclude-physics-practical').checked;
     let isGSEnabled = document.getElementById('enable-general-studies').checked;
 
-    // نسخة مؤقتة من المقاعد لفحصها أثناء التوليد
     let tempRemaining = {};
     for (let crn in globalCRNDetails) {
         tempRemaining[crn] = globalCRNDetails[crn].initialRemaining;
@@ -1394,24 +1392,17 @@ function autoGeneratePackages(defaultCap) {
         let studentsCount = traineesData.filter(t => t.program === prog).length;
         if (studentsCount === 0) return;
 
-        // البحث عن الخطة (بمطابقة ذكية)
-        let planData = dynamicSC04Plan[prog];
+        let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
         if (!planData) {
-            for (let key in dynamicSC04Plan) {
-                if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
-            }
-        }
-
-        if (!planData) {
-            aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة مستوى أول.</div>`);
+            aiLog.push(`<div style="color:#dc3545;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة.</div>`);
             return; 
         }
 
         let packagesNeeded = Math.ceil(studentsCount / defaultCap) || 1;
         let planCourses = Array.from(planData.courses);
         
-        // جلب أرقام الدراسات العامة المحجوزة لهذا القسم
-        let fixedGSCrns = (isGSEnabled && programGSMapping[prog]) ? programGSMapping[prog] : [];
+        // جلب قائمة "الخيارات" التي حددها المستخدم للدراسات العامة لهذا القسم
+        let gsOptionsPool = (isGSEnabled && programGSMapping[prog]) ? programGSMapping[prog] : [];
 
         let successfulPackages = 0;
 
@@ -1425,37 +1416,41 @@ function autoGeneratePackages(defaultCap) {
             planCourses.forEach(planCourse => {
                 let normPlan = globalNormalizeCode(planCourse);
                 
-                // فحص: هل هذا المقرر تم تغطيته في الدراسات العامة المختارة يدوياً؟
-                let isCoveredInGS = fixedGSCrns.some(gsCrn => {
+                // 1. فحص: هل هذا المقرر (مثلاً إنجليزي) له "خيارات محددة" في الدراسات العامة؟
+                let specificOptions = gsOptionsPool.filter(gsCrn => {
                     let details = globalCRNDetails[gsCrn];
                     if (!details) return false;
-                    let gsCourseNorm = globalNormalizeCode(details.course);
-                    return gsCourseNorm.includes(normPlan) || normPlan.includes(gsCourseNorm);
+                    let gsCode = globalNormalizeCode(details.course);
+                    let gsName = globalNormalizeCode(details.name);
+                    return gsCode.includes(normPlan) || normPlan.includes(gsCode) || gsName.includes(normPlan);
                 });
 
-                if (isCoveredInGS) return; // تخطي البحث عنه لأنه موجود مسبقاً في الرزمة
-
-                // إذا لم يكن محجوزاً، نبحث عن الشعب المتوفرة في الجدول (SS01)
                 let pool = { theory: [], practical: [] };
-                for (let crn in globalCRNDetails) {
-                    let details = globalCRNDetails[crn];
-                    let normSS01Course = globalNormalizeCode(details.course + details.name);
-                    
-                    if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
-                        let typeStr = String(details.type).toLowerCase();
-                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) {
-                            pool.theory.push(crn);
-                        } else {
-                            pool.practical.push(crn);
+
+                // 2. إذا وجدنا خيارات محددة من المستخدم، نستخدمها هي فقط
+                if (specificOptions.length > 0) {
+                    specificOptions.forEach(crn => {
+                        let det = globalCRNDetails[crn];
+                        let type = String(det.type).toLowerCase();
+                        if (type.includes('نظري') || type.includes('محاضرة') || type.includes('عن بعد')) pool.theory.push(crn);
+                        else pool.practical.push(crn);
+                    });
+                } 
+                // 3. إذا لم يحدد المستخدم خيارات لهذا المقرر، نبحث في كل الجدول كالمعتاد
+                else {
+                    for (let crn in globalCRNDetails) {
+                        let details = globalCRNDetails[crn];
+                        let normSS01Course = globalNormalizeCode(details.course + details.name);
+                        if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
+                            let typeStr = String(details.type).toLowerCase();
+                            if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد')) pool.theory.push(crn);
+                            else pool.practical.push(crn);
                         }
                     }
                 }
 
-                // تحديد الأجزاء المطلوبة للمقرر
                 let reqParts = window.globalCourseRequirements[normPlan] || 1;
-                if (normPlan.includes('فيزي') || normPlan.includes('فيزياء')) {
-                    reqParts = excludePhysics ? 1 : 2;
-                }
+                if (normPlan.includes('فيزي') || normPlan.includes('فيزياء')) reqParts = excludePhysics ? 1 : 2;
 
                 const getValidOptions = (list) => list.filter(c => tempRemaining[c] >= seatsNeeded).sort((a,b) => tempRemaining[b] - tempRemaining[a]);
 
@@ -1479,8 +1474,7 @@ function autoGeneratePackages(defaultCap) {
                 break; 
             }
 
-            // محاولة بناء رزمة خالية من التعارض الزمني
-            // نبدأ الرزمة بالمواد المحجوزة (fixedGSCrns)
+            // 4. المحرك (Solver) سيختار الآن "شعبة واحدة فقط" لكل مادة من قائمة الخيارات
             let finalBundle = null;
             const solve = (idx, current) => {
                 if (idx === requiredPicks.length) return current;
@@ -1494,21 +1488,20 @@ function autoGeneratePackages(defaultCap) {
                 return null;
             };
 
-            finalBundle = solve(0, [...fixedGSCrns]);
+            finalBundle = solve(0, []); // يبدأ بمصفوفة فارغة ويملأها بالخيار الأنسب
 
             if (finalBundle) {
                 generatedPackages.push({ prog: prog, cap: defaultCap, crns: finalBundle.join(' ') });
                 finalBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; });
                 successfulPackages++;
             } else {
-                aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>⚠️ ${prog}:</strong> تعارض زمني يمنع إكمال رزمة إضافية.</div>`);
+                aiLog.push(`<div style="color:#d35400; background:#fef5e7; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>🚫 ${prog}:</strong> لم يجد النظام أي توليفة بدون تعارض من الخيارات المحددة.</div>`);
                 break;
             }
         }
-        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة مكتملة.</div>`);
+        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة.</div>`);
     });
 
-    // تحديث الواجهة وحفظ البيانات
     if (generatedPackages.length > 0) {
         document.getElementById('num-packages').value = generatedPackages.length;
         localStorage.setItem('numPackages', generatedPackages.length);
@@ -1517,7 +1510,6 @@ function autoGeneratePackages(defaultCap) {
         loadPackagesFromLocal();
         saveSessionState();
     }
-
     document.getElementById('ai-log-content').innerHTML = aiLog.join('');
     document.getElementById('ai-log-modal').style.display = 'flex';
 }

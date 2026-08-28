@@ -1340,7 +1340,7 @@ function savePhysicsSetting() {
 // 1. تعريف المتغيرات العامة (مرة واحدة فقط)
 let globalOldStudents = [];
 let globalCurrentTerm = 0;
-let programGSMapping = {}; // لتخزين شعب الدراسات العامة لكل تخصص
+let programGSMapping = {}; 
 
     // 1. الدالة الوسيطة لبدء عملية التوليد (تُستدعى من زر التوليد الآلي)
 function prepareAutoGen() {
@@ -1718,22 +1718,22 @@ function renderGSSelect(prog, index) {
     selectContainer.innerHTML = html;
 }
 
-// إضافة مقرر وتحديث القائمة
 function addGSTag(prog, crn, index) {
     if (!crn) return;
     if (!programGSMapping[prog]) programGSMapping[prog] = [];
     if (programGSMapping[prog].includes(crn)) return;
     
     programGSMapping[prog].push(crn);
-    renderGSTag(prog, crn, index); // رسم التاج
-    renderGSSelect(prog, index);   // إعادة رسم القائمة لإخفاء العنصر المختار
+    renderGSTag(prog, crn, index);
+    renderGSSelect(prog, index);
+    saveSessionState(); // حفظ فوري عند الإضافة
 }
 
-// حذف مقرر وتحديث القائمة
 function removeGSTag(prog, crn, element, index) {
     programGSMapping[prog] = programGSMapping[prog].filter(c => c !== crn);
-    element.parentElement.remove(); // إزالة التاج من الواجهة
-    renderGSSelect(prog, index);   // إعادة رسم القائمة لإظهار العنصر المحذوف مجدداً
+    element.parentElement.remove();
+    renderGSSelect(prog, index);
+    saveSessionState(); // حفظ فوري عند الحذف
 }
 
 // دالة مساعدة لرسم التاج (Tag) ليحتوي على الرقم واسم المقرر
@@ -3155,7 +3155,6 @@ function toggleTheme() {
     });
 })();
   
-// دالة حفظ حالة الجلسة 
 async function saveSessionState() {
     try {
         let linkedToSave = {};
@@ -3172,19 +3171,18 @@ async function saveSessionState() {
             isSc04Attached: isSc04Attached,
             globalCourseRequirements: window.globalCourseRequirements,
             globalLinkedCRNs: linkedToSave,
+            programGSMapping: programGSMapping, // إضافة هذا السطر لحفظ التخصيص
+            globalGeneralStudiesOptions: window.globalGeneralStudiesOptions, // حفظ قائمة الخيارات
             currentPage: document.querySelector('.page.active') ? document.querySelector('.page.active').id : 'page-1'
         };
 
-        // حفظ في IndexedDB 
         await saveToDB('activeSession', state);
-        console.log("تم حفظ الجلسة بنجاح (IndexedDB)");
+        console.log("تم حفظ الجلسة كاملة");
     } catch (e) {
         console.error("فشل الحفظ:", e);
-        showToast("⚠️ تنبيه: تعذر حفظ الجلسة تلقائياً بسبب حجم البيانات.");
     }
 }
 
-// دالة استعادة الجلسة 
 async function restoreSessionState() {
     try {
         let state = await getFromDB('activeSession');
@@ -3197,6 +3195,8 @@ async function restoreSessionState() {
             dynamicSC04Plan = state.dynamicSC04Plan || {}; 
             isSc04Attached = state.isSc04Attached || false;
             window.globalCourseRequirements = state.globalCourseRequirements || {}; 
+            programGSMapping = state.programGSMapping || {}; // استعادة التخصيص
+            window.globalGeneralStudiesOptions = state.globalGeneralStudiesOptions || []; // استعادة القائمة
 
             globalLinkedCRNs = {};
             if(state.globalLinkedCRNs) {
@@ -3205,7 +3205,6 @@ async function restoreSessionState() {
                 }
             }
             
-            // استعادة الواجهة
             if (state.currentPage === 'page-2') {
                 loadPackagesFromLocal(); 
                 switchPage('page-2');
@@ -3213,10 +3212,10 @@ async function restoreSessionState() {
                 setupPage3();
                 switchPage('page-3');
             }
-            showToast("🔄 تم استعادة البيانات");
+            showToast("🔄 تم استعادة البيانات وتخصيص الدراسات العامة");
         }
     } catch (e) {
-        console.warn("لا توجد جلسة سابقة لاستعادتها.");
+        console.warn("لا توجد جلسة سابقة.");
     }
 }
 

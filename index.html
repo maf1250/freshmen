@@ -466,9 +466,9 @@
        style="background: var(--bg-inset); color: var(--text-primary); border: 1px solid var(--border); width: 60px; font-weight: bold; text-align: center;">
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
-                <button onclick="openAutoGenModal()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#d68910'" onmouseout="this.style.backgroundColor='#f39c12'">
-                     توليد الرزم تلقائيًا
-                </button>
+               <button onclick="prepareAutoGen()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;">
+     توليد الرزم تلقائيًا
+</button>
                 <button onclick="deleteAllPackages()" style="background-color: #dc3545; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#c82333'" onmouseout="this.style.backgroundColor='#dc3545'" title="حذف جميع الرزم والبدء من جديد">
                     🗑️ حذف الكل
                 </button>
@@ -1316,186 +1316,6 @@ function savePhysicsSetting() {
         document.body.style.overflow = '';
     }
 
-    function startAutoGenerate() {
-        let capacityInput = document.getElementById('auto-gen-capacity').value;
-        let cap = parseInt(capacityInput) || 20;
-        if (cap < 1) cap = 20; // لتفادي إدخال المستخدم لقيمة صفر أو سالبة
-        
-        closeAutoGenModal(); // إغلاق النافذة
-        autoGeneratePackages(cap); // تمرير السعة المختارة للدالة
-    }
-
-    // ---------------- خوارزمية التوليد التلقائي الذكي ----------------
-    function autoGeneratePackages(defaultCap) {
-        let generatedPackages = [];
-        let aiLog = []; 
-        let excludePhysics = document.getElementById('exclude-physics-practical') ? document.getElementById('exclude-physics-practical').checked : false;
-
-        // نسخة مؤقتة من المقاعد
-        let tempRemaining = {};
-        for (let crn in globalCRNDetails) {
-            tempRemaining[crn] = globalCRNDetails[crn].initialRemaining;
-        }
-
-        const normalizeCode = (code) => {
-            if (!code) return '';
-            return String(code).replace(/[٠-٩]/g, d => "٠١٢٣٤٥٦٧٨٩".indexOf(d)).replace(/[\s\-_\.]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
-        };
-
-        uniquePrograms.forEach(prog => {
-            let studentsCount = traineesData.filter(t => t.program === prog).length;
-            if (studentsCount === 0) return;
-
-            let planData = dynamicSC04Plan[prog];
-            if (!planData) {
-                for (let key in dynamicSC04Plan) {
-                    if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
-                }
-            }
-            if (!planData) {
-                aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة المستوى الأول لهذا التخصص في ملف SC04.</div>`);
-                return; 
-            }
-
-            let packagesNeeded = Math.ceil(studentsCount / defaultCap);
-            if (packagesNeeded === 0) packagesNeeded = 1;
-
-            let planCourses = Array.from(planData.courses);
-            let availableCrnsByCourse = {};
-
-            planCourses.forEach(planCourse => {
-                let normPlan = normalizeCode(planCourse);
-                availableCrnsByCourse[normPlan] = { theory: [], practical: [] };
-
-                for (let crn in globalCRNDetails) {
-                    if (tempRemaining[crn] <= 0) continue;
-                    let details = globalCRNDetails[crn];
-                    let normCourse = normalizeCode(details.course + details.name);
-                    
-                    if (normCourse.includes(normPlan) || normPlan.includes(normalizeCode(details.course))) {
-                        let typeStr = String(details.type).toLowerCase();
-                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('مدمج') || typeStr.includes('عن بعد')) {
-                            availableCrnsByCourse[normPlan].theory.push(crn);
-                        } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
-                            availableCrnsByCourse[normPlan].practical.push(crn);
-                        }
-                    }
-                }
-            });
-let successfulPackages = 0;
-
-            for (let i = 0; i < packagesNeeded; i++) {
-                let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
-                if (seatsNeeded <= 0) seatsNeeded = defaultCap;
-
-                let requiredPicks = [];
-                let missingGlobally = [];
-
-                planCourses.forEach(planCourse => {
-                    let normPlan = normalizeCode(planCourse);
-                    let pool = availableCrnsByCourse[normPlan];
-                    
-                    let reqParts = window.globalCourseRequirements[normPlan] || 1;
-                    if (normPlan.includes('فيزي') || normPlan.includes('فيزياء') || normPlan.includes('phys')) {
-                        reqParts = excludePhysics ? 1 : 2;
-                    }
-
-                    const getValidOptions = (crnList) => {
-                        return crnList
-                            .filter(crn => tempRemaining[crn] >= seatsNeeded)
-                            .sort((a, b) => tempRemaining[b] - tempRemaining[a]); // ترتيب ثابت لا عشوائي
-                    };
-
-                   if (reqParts === 2) {
-                        let tOptions = getValidOptions(pool.theory);
-                        if (tOptions.length === 0) {
-                            let crnsText = pool.theory.length > 0 ? `[شعب النظري: ${pool.theory.join('، ')}]` : '[لا توجد شعب بالجدول]';
-                            missingGlobally.push(`${planCourse} ${crnsText}`);
-                        } else requiredPicks.push({ name: `${planCourse} (نظري)`, options: tOptions });
-
-                        let pOptions = getValidOptions(pool.practical);
-                        if (pOptions.length === 0) {
-                            let crnsText = pool.practical.length > 0 ? `[شعب العملي: ${pool.practical.join('، ')}]` : '[لا توجد شعب بالجدول]';
-                            missingGlobally.push(`${planCourse} ${crnsText}`);
-                        } else requiredPicks.push({ name: `${planCourse} (عملي)`, options: pOptions });
-                    } else {
-                        let allPool = [...pool.theory, ...pool.practical];
-                        let options = getValidOptions(allPool);
-                        if (options.length === 0) {
-                            let crnsText = allPool.length > 0 ? `[أرقام الشعب: ${allPool.join('، ')}]` : '[لا توجد شعب بالجدول]';
-                            missingGlobally.push(`${planCourse} ${crnsText}`);
-                        } else requiredPicks.push({ name: planCourse, options: options });
-                    }
-                });
-
-                if (missingGlobally.length > 0) {
-                    let uniqueMissing = [...new Set(missingGlobally)].join('، ');
-                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال رزمة إضافية لنفاد المقاعد (نحتاج ${seatsNeeded} مقعد).<br>المقررات التي تسببت بالمشكلة: <span style="color:#dc3545; font-weight:bold;">${uniqueMissing}</span></div>`);
-                    break;
-                }
-
-                let bestBundle = null;
-                let lastConflictMissing = null;
-
-                const findValidBundle = (pickIndex, currentBundle) => {
-                    if (pickIndex === requiredPicks.length) return currentBundle; // اكتملت الرزمة بنجاح بدون تعارض
-
-                    let currentPick = requiredPicks[pickIndex];
-                    for (let crn of currentPick.options) {
-                        let testBundle = [...currentBundle, crn];
-                        let linkErrors = getLinkageErrors(testBundle);
-                        if (linkErrors.length === 0 && !checkScheduleConflicts(testBundle).hasOverlap) {
-                            let result = findValidBundle(pickIndex + 1, testBundle); // جرب المستوى التالي
-                            if (result) return result;
-                        } else {
-                            lastConflictMissing = `${currentPick.name} [الأرقام المرجعية: ${currentPick.options.join('، ')}]`;
-                        }
-                    }
-                    return null; // تراجع وبحث عن خيار آخر
-                };
-
-                requiredPicks.sort((a, b) => a.options.length - b.options.length);
-
-                bestBundle = findValidBundle(0, []);
-
-                if (bestBundle) {
-                    generatedPackages.push({ prog: prog, cap: defaultCap, crns: bestBundle.join(' ') });
-                    bestBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; }); 
-                    successfulPackages++;
-                } else {
-                    aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #ffeeba;"><strong>⚠️ ${prog}:</strong> تعذر إكمال الرزمة بسبب وجود تعارض زمني حتمي بين الشعب المتاحة.<br>تعثر عند: <span style="color:#dc3545; font-weight:bold;">${lastConflictMissing || 'غير محدد'}</span></div>`);
-                    break; 
-                }
-            }
-
-            if (successfulPackages > 0) {
-                aiLog.push(`<div style="color:#155724; background:#d4edda; padding:10px; border-radius:4px; margin-bottom:8px; border:1px solid #c3e6cb;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة (مكتملة وخالية من التعارض) بنجاح.</div>`);
-            }
-        });
-
-        // إذا فشل في بناء أي رزمة
-        if (generatedPackages.length === 0) {
-            aiLog.unshift(`<div style="color:#721c24; background:#f8d7da; padding:15px; border-radius:6px; font-size: 15px; font-weight:bold; margin-bottom: 15px; text-align:center;">❌ فشل التوليد: لم يتمكن النظام من بناء أي رزمة مكتملة. نأمل التأكد من وجود مقاعد متاحة وعدم وجود تعارضات .</div>`);
-        } else {
-            // تحديث الواجهة بالرزم الناجحة فقط
-            document.getElementById('num-packages').value = generatedPackages.length;
-            localStorage.setItem('numPackages', generatedPackages.length);
-            
-            let formattedForStorage = generatedPackages.map((pkg, index) => ({
-                id: index + 1, prog: pkg.prog, cap: pkg.cap, crns: pkg.crns
-            }));
-            
-            localStorage.setItem('savedPackages', JSON.stringify(formattedForStorage));
-            loadPackagesFromLocal();
-            saveSessionState();
-        }
-
-        // عرض نافذة التقرير
-        document.getElementById('ai-log-content').innerHTML = aiLog.join('');
-        document.getElementById('ai-log-modal').style.display = 'flex';
-        document.body.style.overflow = 'hidden';
-    }
-
     function closeAiLogModal(event) {
         if (event) event.stopPropagation();
         document.getElementById('ai-log-modal').style.display = 'none';
@@ -1518,7 +1338,187 @@ let globalOldStudents = [];
 let globalCurrentTerm = 0;
 let programGSMapping = {}; // لتخزين شعب الدراسات العامة لكل تخصص
 
-// 2. الدالة الأساسية عند الضغط على زر "تنفيذ الإسناد"
+    // 1. الدالة الوسيطة لبدء عملية التوليد (تُستدعى من زر التوليد الآلي)
+function prepareAutoGen() {
+    if (!isSc04Attached) {
+        showToast("⚠️ يجب إرفاق تقرير الخطط (SC04) أولاً لتحديد مواد المستوى الأول");
+        return;
+    }
+    const isGSEnabled = document.getElementById('enable-general-studies').checked;
+    if (isGSEnabled) {
+        // إذا كان تخصيص الدراسات العامة مفعلاً، نفتح النافذة أولاً لتحديد الشعب
+        openGSModal();
+        // ملاحظة: قمنا بتعديل دالة confirmGeneralStudies بالأسفل لتفتح نافذة السعة بعد الحفظ
+    } else {
+        openAutoGenModal();
+    }
+}
+
+// 2. تحديث دالة تأكيد الدراسات العامة لتوجيه المستخدم للخطوة التالية
+function confirmGeneralStudies() {
+    document.getElementById('gs-modal').style.display = 'none';
+    document.body.style.overflow = '';
+    showToast("✅ تم حفظ تخصيص الدراسات العامة");
+    // نفتح نافذة تحديد السعة فوراً للمتابعة في التوليد الآلي
+    openAutoGenModal(); 
+}
+
+// 3. الدالة التي تستقبل السعة وتبدأ التوليد الفعلي
+function startAutoGenerate() {
+    let capacityInput = document.getElementById('auto-gen-capacity').value;
+    let cap = parseInt(capacityInput) || 20;
+    if (cap < 1) cap = 20;
+    
+    closeAutoGenModal(); 
+    autoGeneratePackages(cap); 
+}
+
+// 4. خوارزمية التوليد التلقائي الذكي (النسخة الكاملة والمصححة)
+function autoGeneratePackages(defaultCap) {
+    let generatedPackages = [];
+    let aiLog = []; 
+    let excludePhysics = document.getElementById('exclude-physics-practical').checked;
+    let isGSEnabled = document.getElementById('enable-general-studies').checked;
+
+    // نسخة مؤقتة من المقاعد لفحصها أثناء التوليد
+    let tempRemaining = {};
+    for (let crn in globalCRNDetails) {
+        tempRemaining[crn] = globalCRNDetails[crn].initialRemaining;
+    }
+
+    uniquePrograms.forEach(prog => {
+        let studentsCount = traineesData.filter(t => t.program === prog).length;
+        if (studentsCount === 0) return;
+
+        // البحث عن الخطة (بمطابقة ذكية)
+        let planData = dynamicSC04Plan[prog];
+        if (!planData) {
+            for (let key in dynamicSC04Plan) {
+                if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
+            }
+        }
+
+        if (!planData) {
+            aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة مستوى أول.</div>`);
+            return; 
+        }
+
+        let packagesNeeded = Math.ceil(studentsCount / defaultCap) || 1;
+        let planCourses = Array.from(planData.courses);
+        
+        // جلب أرقام الدراسات العامة المحجوزة لهذا القسم
+        let fixedGSCrns = (isGSEnabled && programGSMapping[prog]) ? programGSMapping[prog] : [];
+
+        let successfulPackages = 0;
+
+        for (let i = 0; i < packagesNeeded; i++) {
+            let seatsNeeded = (i === packagesNeeded - 1) ? (studentsCount - (i * defaultCap)) : defaultCap;
+            if (seatsNeeded <= 0) seatsNeeded = defaultCap;
+
+            let requiredPicks = [];
+            let missingForThisBundle = [];
+
+            planCourses.forEach(planCourse => {
+                let normPlan = globalNormalizeCode(planCourse);
+                
+                // فحص: هل هذا المقرر تم تغطيته في الدراسات العامة المختارة يدوياً؟
+                let isCoveredInGS = fixedGSCrns.some(gsCrn => {
+                    let details = globalCRNDetails[gsCrn];
+                    if (!details) return false;
+                    let gsCourseNorm = globalNormalizeCode(details.course);
+                    return gsCourseNorm.includes(normPlan) || normPlan.includes(gsCourseNorm);
+                });
+
+                if (isCoveredInGS) return; // تخطي البحث عنه لأنه موجود مسبقاً في الرزمة
+
+                // إذا لم يكن محجوزاً، نبحث عن الشعب المتوفرة في الجدول (SS01)
+                let pool = { theory: [], practical: [] };
+                for (let crn in globalCRNDetails) {
+                    let details = globalCRNDetails[crn];
+                    let normSS01Course = globalNormalizeCode(details.course + details.name);
+                    
+                    if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
+                        let typeStr = String(details.type).toLowerCase();
+                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) {
+                            pool.theory.push(crn);
+                        } else {
+                            pool.practical.push(crn);
+                        }
+                    }
+                }
+
+                // تحديد الأجزاء المطلوبة للمقرر
+                let reqParts = window.globalCourseRequirements[normPlan] || 1;
+                if (normPlan.includes('فيزي') || normPlan.includes('فيزياء')) {
+                    reqParts = excludePhysics ? 1 : 2;
+                }
+
+                const getValidOptions = (list) => list.filter(c => tempRemaining[c] >= seatsNeeded).sort((a,b) => tempRemaining[b] - tempRemaining[a]);
+
+                if (reqParts === 2) {
+                    let tOpts = getValidOptions(pool.theory);
+                    let pOpts = getValidOptions(pool.practical);
+                    if (tOpts.length === 0 || pOpts.length === 0) missingForThisBundle.push(planCourse);
+                    else {
+                        requiredPicks.push({ name: planCourse + " (نظري)", options: tOpts });
+                        requiredPicks.push({ name: planCourse + " (عملي)", options: pOpts });
+                    }
+                } else {
+                    let allOpts = getValidOptions([...pool.theory, ...pool.practical]);
+                    if (allOpts.length === 0) missingForThisBundle.push(planCourse);
+                    else requiredPicks.push({ name: planCourse, options: allOpts });
+                }
+            });
+
+            if (missingForThisBundle.length > 0) {
+                aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>⚠️ ${prog}:</strong> نفدت مقاعد [${missingForThisBundle.join('، ')}]</div>`);
+                break; 
+            }
+
+            // محاولة بناء رزمة خالية من التعارض الزمني
+            // نبدأ الرزمة بالمواد المحجوزة (fixedGSCrns)
+            let finalBundle = null;
+            const solve = (idx, current) => {
+                if (idx === requiredPicks.length) return current;
+                for (let crn of requiredPicks[idx].options) {
+                    let next = [...current, crn];
+                    if (getLinkageErrors(next).length === 0 && !checkScheduleConflicts(next).hasOverlap) {
+                        let res = solve(idx + 1, next);
+                        if (res) return res;
+                    }
+                }
+                return null;
+            };
+
+            finalBundle = solve(0, [...fixedGSCrns]);
+
+            if (finalBundle) {
+                generatedPackages.push({ prog: prog, cap: defaultCap, crns: finalBundle.join(' ') });
+                finalBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; });
+                successfulPackages++;
+            } else {
+                aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>⚠️ ${prog}:</strong> تعارض زمني يمنع إكمال رزمة إضافية.</div>`);
+                break;
+            }
+        }
+        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة مكتملة.</div>`);
+    });
+
+    // تحديث الواجهة وحفظ البيانات
+    if (generatedPackages.length > 0) {
+        document.getElementById('num-packages').value = generatedPackages.length;
+        localStorage.setItem('numPackages', generatedPackages.length);
+        let storageData = generatedPackages.map((p, index) => ({ id: index + 1, prog: p.prog, cap: p.cap, crns: p.crns }));
+        localStorage.setItem('savedPackages', JSON.stringify(storageData));
+        loadPackagesFromLocal();
+        saveSessionState();
+    }
+
+    document.getElementById('ai-log-content').innerHTML = aiLog.join('');
+    document.getElementById('ai-log-modal').style.display = 'flex';
+}
+    
+// . الدالة الأساسية عند الضغط على زر "تنفيذ الإسناد"
 function processAssignments() {
     const num = parseInt(document.getElementById('num-packages').value) || 1;
     const status = document.getElementById('status-2');
@@ -1616,14 +1616,7 @@ function removeGSTag(prog, crn, element) {
     element.parentElement.remove();
 }
 
-// اعتماد الدراسات العامة والمتابعة
-function confirmGeneralStudies() {
-    document.getElementById('gs-modal').style.display = 'none';
-    document.body.style.overflow = '';
-    checkOldStudentsAndExecute();
-}
-
-// 4. دالة فحص المتدربين القدامى
+//  دالة فحص المتدربين القدامى
 function checkOldStudentsAndExecute() {
     let prefixes = traineesData.map(t => parseInt(String(t.id).substring(0, 3))).filter(n => !isNaN(n));
     if (prefixes.length > 0) {
@@ -1662,26 +1655,19 @@ function executeAssignments(includeOldStudents) {
     // تصفير عداد الرزم
     packagesData.forEach(p => p.currentCount = 0);
 
-    traineesData.forEach(trainee => {
+   traineesData.forEach(trainee => {
         trainee.assignedPackage = null;
         trainee.assignedCRNs = [];
 
         if (!includeOldStudents && trainee.isOldStudent) return;
 
         let availablePkgs = packagesData.filter(p => p.program === trainee.program);
-        if (isEvenDistribution) {
-            availablePkgs.sort((a, b) => a.currentCount - b.currentCount);
-        }
+        if (isEvenDistribution) availablePkgs.sort((a, b) => a.currentCount - b.currentCount);
 
         for (let pkg of availablePkgs) {
             if (pkg.currentCount >= pkg.maxCapacity) continue;
 
-            let baseCrns = pkg.crns;
-            let gsCrns = (isGSEnabled && programGSMapping[trainee.program]) ? programGSMapping[trainee.program] : [];
-            let allRequestedCRNs = [...new Set([...baseCrns, ...gsCrns])];
-
-            // فحص توفر المقاعد
-            let hasEnoughSeats = allRequestedCRNs.every(crn => {
+            let hasEnoughSeats = pkg.crns.every(crn => {
                 let cleanCrn = crn.trim();
                 return globalCRNDetails[cleanCrn] && globalCRNDetails[cleanCrn].currentRemaining > 0;
             });
@@ -1689,8 +1675,8 @@ function executeAssignments(includeOldStudents) {
             if (hasEnoughSeats) {
                 pkg.currentCount++;
                 trainee.assignedPackage = pkg.id;
-                trainee.assignedCRNs = allRequestedCRNs;
-                allRequestedCRNs.forEach(crn => {
+                trainee.assignedCRNs = [...pkg.crns]; // الرزمة جاهزة
+                pkg.crns.forEach(crn => {
                     if (globalCRNDetails[crn.trim()]) {
                         globalCRNDetails[crn.trim()].currentRemaining--;
                     }

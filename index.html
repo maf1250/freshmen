@@ -1392,16 +1392,29 @@ function autoGeneratePackages(defaultCap) {
         let studentsCount = traineesData.filter(t => t.program === prog).length;
         if (studentsCount === 0) return;
 
-        let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
+        // --- محرك بحث ذكي عن الخطة ---
+        let planData = null;
+        let matchedPlanKey = null;
+
+        // 1. محاولة المطابقة المباشرة
+        if (dynamicSC04Plan[prog]) {
+            planData = dynamicSC04Plan[prog];
+        } else {
+            // 2. البحث باستخدام المطابقة الذكية (Fuzzy Matching) في أسماء الخطط المتوفرة
+            let planKeys = Object.keys(dynamicSC04Plan);
+            matchedPlanKey = planKeys.find(key => isProgramMatch(prog, key));
+            if (matchedPlanKey) {
+                planData = dynamicSC04Plan[matchedPlanKey];
+            }
+        }
+
         if (!planData) {
-            aiLog.push(`<div style="color:#dc3545;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة.</div>`);
+            aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة المستوى الأول في ملف SC04. تأكد من مسمى التخصص.</div>`);
             return; 
         }
 
         let packagesNeeded = Math.ceil(studentsCount / defaultCap) || 1;
         let planCourses = Array.from(planData.courses);
-        
-        // جلب قائمة "الخيارات" التي حددها المستخدم للدراسات العامة لهذا القسم
         let gsOptionsPool = (isGSEnabled && programGSMapping[prog]) ? programGSMapping[prog] : [];
 
         let successfulPackages = 0;
@@ -1416,7 +1429,7 @@ function autoGeneratePackages(defaultCap) {
             planCourses.forEach(planCourse => {
                 let normPlan = globalNormalizeCode(planCourse);
                 
-                // 1. فحص: هل هذا المقرر (مثلاً إنجليزي) له "خيارات محددة" في الدراسات العامة؟
+                // فحص الخيارات المحددة يدوياً لهذا المقرر
                 let specificOptions = gsOptionsPool.filter(gsCrn => {
                     let details = globalCRNDetails[gsCrn];
                     if (!details) return false;
@@ -1427,7 +1440,6 @@ function autoGeneratePackages(defaultCap) {
 
                 let pool = { theory: [], practical: [] };
 
-                // 2. إذا وجدنا خيارات محددة من المستخدم، نستخدمها هي فقط
                 if (specificOptions.length > 0) {
                     specificOptions.forEach(crn => {
                         let det = globalCRNDetails[crn];
@@ -1435,9 +1447,7 @@ function autoGeneratePackages(defaultCap) {
                         if (type.includes('نظري') || type.includes('محاضرة') || type.includes('عن بعد')) pool.theory.push(crn);
                         else pool.practical.push(crn);
                     });
-                } 
-                // 3. إذا لم يحدد المستخدم خيارات لهذا المقرر، نبحث في كل الجدول كالمعتاد
-                else {
+                } else {
                     for (let crn in globalCRNDetails) {
                         let details = globalCRNDetails[crn];
                         let normSS01Course = globalNormalizeCode(details.course + details.name);
@@ -1474,7 +1484,6 @@ function autoGeneratePackages(defaultCap) {
                 break; 
             }
 
-            // 4. المحرك (Solver) سيختار الآن "شعبة واحدة فقط" لكل مادة من قائمة الخيارات
             let finalBundle = null;
             const solve = (idx, current) => {
                 if (idx === requiredPicks.length) return current;
@@ -1488,7 +1497,7 @@ function autoGeneratePackages(defaultCap) {
                 return null;
             };
 
-            finalBundle = solve(0, []); // يبدأ بمصفوفة فارغة ويملأها بالخيار الأنسب
+            finalBundle = solve(0, []); 
 
             if (finalBundle) {
                 generatedPackages.push({ prog: prog, cap: defaultCap, crns: finalBundle.join(' ') });
@@ -1499,7 +1508,7 @@ function autoGeneratePackages(defaultCap) {
                 break;
             }
         }
-        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة.</div>`);
+        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة بنجاح.</div>`);
     });
 
     if (generatedPackages.length > 0) {

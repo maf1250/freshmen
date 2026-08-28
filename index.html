@@ -1591,22 +1591,46 @@ function openGSModal() {
     document.body.style.overflow = 'hidden';
 }
 
-// دالة لرسم القائمة المنسدلة (Dropdown) مع فلترة العناصر المختارة
+// دالة لرسم القائمة المنسدلة (Dropdown) مع فلترة ذكية (مستوى أول + غير مختار)
 function renderGSSelect(prog, index) {
     const selectContainer = document.getElementById(`gs-select-container-${index}`);
     let selectedCrns = programGSMapping[prog] || [];
     
+    // 1. جلب بيانات الخطة (SC04) لهذا التخصص
+    let planData = dynamicSC04Plan[prog];
+    if (!planData) {
+        for (let key in dynamicSC04Plan) {
+            if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
+        }
+    }
+
     let html = `<select onchange="addGSTag('${prog}', this.value, ${index})" style="width:100%; padding:5px; font-size:12px;">
-                <option value="">-- اختر شعبة دراسات عامة --</option>`;
+                <option value="">-- نأمل اختيار شعبة --</option>`;
     
-    if (window.globalGeneralStudiesOptions) {
+    // 2. إذا توفرت الخطة وخيارات الدراسات العامة
+    if (window.globalGeneralStudiesOptions && planData) {
+        // توحيد أكواد المقررات الموجودة في خطة المستوى الأول لهذا التخصص لسهولة المقارنة
+        let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
+
         window.globalGeneralStudiesOptions.forEach(opt => {
-            // إخفاء المقرر إذا كان مختاراً مسبقاً في هذا التخصص فقط
-            if (!selectedCrns.includes(opt.crn)) {
+            let details = globalCRNDetails[opt.crn];
+            if (!details) return;
+
+            // الحصول على كود المقرر للشعبة الحالية (مثلاً: انجل-101)
+            let courseNorm = globalNormalizeCode(details.course);
+
+            // 3. الشرط: يجب أن يكون المقرر موجوداً في خطة المستوى الأول لهذا التخصص
+            // وألا يكون قد تم اختياره مسبقاً في نفس القائمة
+            let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
+
+            if (isInPlan && !selectedCrns.includes(opt.crn)) {
                 html += `<option value="${opt.crn}">${opt.label}</option>`;
             }
         });
+    } else if (!planData) {
+        html = `<option value="">⚠️ عذراً: لم يتم العثور على خطة لهذا التخصص</option>`;
     }
+
     html += `</select>`;
     selectContainer.innerHTML = html;
 }
@@ -1629,15 +1653,33 @@ function removeGSTag(prog, crn, element, index) {
     renderGSSelect(prog, index);   // إعادة رسم القائمة لإظهار العنصر المحذوف مجدداً
 }
 
-// دالة مساعدة لرسم التاج
+// دالة مساعدة لرسم التاج (Tag) ليحتوي على الرقم واسم المقرر
 function renderGSTag(prog, crn, index) {
     const container = document.getElementById(`gs-tags-${index}`);
+    
+    // جلب تفاصيل المقرر من البيانات المخزنة لدينا
+    let details = globalCRNDetails[crn];
+    let courseName = details ? details.name : "غير معروف";
+    let courseCode = details ? details.course : "";
+
     let tag = document.createElement('div');
     tag.className = 'crn-tag green'; 
     tag.style.fontSize = '11px';
-    tag.style.padding = '2px 8px';
-    // إضافة الـ index للدالة لكي نعرف أي قائمة نحدثها عند الحذف
-    tag.innerHTML = `<span>${crn}</span> <span class="remove" onclick="removeGSTag('${prog}', '${crn}', this, ${index})">✖</span>`;
+    tag.style.padding = '4px 10px';
+    tag.style.display = 'flex';
+    tag.style.alignItems = 'center';
+    tag.style.gap = '8px';
+    tag.style.marginBottom = '5px';
+
+    // عرض الرقم المرجعي بخلفية داكنة قليلاً + اسم المقرر
+    tag.innerHTML = `
+        <strong style="background: rgba(0,0,0,0.15); padding: 1px 5px; border-radius: 4px;">${crn}</strong>
+        <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 150px;" title="${courseName}">
+            ${courseName}
+        </span>
+        <span class="remove" onclick="removeGSTag('${prog}', '${crn}', this, ${index})" style="margin-right: auto; cursor: pointer; font-weight: bold;">✖</span>
+    `;
+    
     container.appendChild(tag);
 }
 

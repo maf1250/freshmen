@@ -589,6 +589,7 @@ async function getFromDB(key) {
     let isSc04Attached = false;
     let globalCRNDetails = {};
     let globalLinkedCRNs = {};
+    let planMappingCache = {}; 
 
     // دوال قراءة الملفات
     function readExcelFile(file) {
@@ -1706,14 +1707,24 @@ function openGSModal() {
 function getPlanForProgram(programName) {
     if (!programName || !dynamicSC04Plan) return null;
     
-    // أ- محاولة المطابقة المباشرة (سريع)
-    if (dynamicSC04Plan[programName]) return dynamicSC04Plan[programName];
+    if (planMappingCache[programName]) {
+        return dynamicSC04Plan[planMappingCache[programName]];
+    }
 
-    // ب- البحث الذكي في كل أسماء الخطط المرفقة باستخدام دالة المطابقة
+    if (dynamicSC04Plan[programName]) {
+        planMappingCache[programName] = programName;
+        return dynamicSC04Plan[programName];
+    }
+
     let keys = Object.keys(dynamicSC04Plan);
     let matchedKey = keys.find(k => isProgramMatch(programName, k));
     
-    return matchedKey ? dynamicSC04Plan[matchedKey] : null;
+    if (matchedKey) {
+        planMappingCache[programName] = matchedKey; // تخزين النتيجة للمرة القادمة
+        return dynamicSC04Plan[matchedKey];
+    }
+    
+    return null;
 }
 
 // دالة المطابقة الذكية 
@@ -3243,31 +3254,34 @@ function toggleTheme() {
 })();
   
 async function saveSessionState() {
-    try {
-        let linkedToSave = {};
-        for (let k in globalLinkedCRNs) {
-            linkedToSave[k] = Array.from(globalLinkedCRNs[k]);
+    // استخدام setTimeout للسماح للمتصفح بتحديث الواجهة أولاً قبل البدء بعملية الحفظ الثقيلة
+    setTimeout(async () => {
+        try {
+            let linkedToSave = {};
+            for (let k in globalLinkedCRNs) {
+                linkedToSave[k] = Array.from(globalLinkedCRNs[k]);
+            }
+
+            let state = {
+                traineesData: traineesData,
+                uniquePrograms: uniquePrograms,
+                packagesData: packagesData,
+                globalCRNDetails: globalCRNDetails,
+                dynamicSC04Plan: dynamicSC04Plan,
+                isSc04Attached: isSc04Attached,
+                globalCourseRequirements: window.globalCourseRequirements,
+                globalLinkedCRNs: linkedToSave,
+                programGSMapping: programGSMapping,
+                globalGeneralStudiesOptions: window.globalGeneralStudiesOptions,
+                currentPage: document.querySelector('.page.active')?.id || 'page-1'
+            };
+
+            await saveToDB('activeSession', state);
+            console.log("تم الحفظ في الخلفية");
+        } catch (e) {
+            console.error("فشل الحفظ التلقائي");
         }
-
-        let state = {
-            traineesData: traineesData,
-            uniquePrograms: uniquePrograms,
-            packagesData: packagesData,
-            globalCRNDetails: globalCRNDetails,
-            dynamicSC04Plan: dynamicSC04Plan,
-            isSc04Attached: isSc04Attached,
-            globalCourseRequirements: window.globalCourseRequirements,
-            globalLinkedCRNs: linkedToSave,
-            programGSMapping: programGSMapping, // إضافة هذا السطر لحفظ التخصيص
-            globalGeneralStudiesOptions: window.globalGeneralStudiesOptions, // حفظ قائمة الخيارات
-            currentPage: document.querySelector('.page.active') ? document.querySelector('.page.active').id : 'page-1'
-        };
-
-        await saveToDB('activeSession', state);
-        console.log("تم حفظ الجلسة كاملة");
-    } catch (e) {
-        console.error("فشل الحفظ:", e);
-    }
+    }, 100); // تأخير بسيط جداً لمنع تجمد الواجهة
 }
 
 async function restoreSessionState() {
@@ -3538,13 +3552,14 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
 
     <!-- نافذة تخصيص الدراسات العامة -->
 <div id="gs-modal" class="modal-overlay" style="z-index: 100005;">
-    <div class="modal-box" style="max-width: 900px; max-height: 85vh;">
+    <div class="modal-box" style="max-width: 1000px; width: 98%; max-height: 96vh; display: flex; flex-direction: column;">
         <h2 style="text-align:center; color:var(--primary); margin-top:0;">تحديد شعب الدراسات العامة لكل تخصص</h2>
         <p style="text-align:center; font-size:13px; color:#666;">نأمل اختيار الشعب التي سيتم إضافتها تلقائياً لكل رزمة حسب التخصص</p>
         <p style="text-align:center; font-size:13px; color:#666;">عدم إضافة مقرر معين يعني أنه سيتم اختيار شعبه بشكل مرن</p>
         <p style="text-align:center; font-size:13px; color:#e00236;">في حال عدم الرغبة في التخصيص، نأمل الضغط على زر الإلغاء وإزالة العلامة من الخيار في أعلى الصفحة</p>
         
-<div id="gs-programs-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; overflow-y: visible !important; max-height: 50vh; padding: 10px; border: 1px solid var(--border); border-radius: 8px;">
+<div id="gs-programs-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 15px; overflow-y: visible !important; flex-grow: 1; max-height: 75vh; padding: 15px; border: 1px solid var(--border); border-radius: 8px;">
+    
 </div>
 
         <div style="margin-top: 20px; display: flex; gap: 10px; justify-content: center;">

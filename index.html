@@ -1657,7 +1657,6 @@ function openGSModal() {
         card.innerHTML = `
             <h4 style="margin:0 0 10px 0; font-size:13px; color:var(--primary); border-bottom:1px dashed #ccc; padding-bottom:5px;">${prog}</h4>
             <div id="gs-select-container-${index}">
-                <!-- سيتم تعبئة القائمة هنا عبر دالة منفصلة -->
             </div>
             <div id="gs-tags-${index}" class="crn-tags-container" style="margin-top:10px; gap:5px;"></div>
         `;
@@ -1768,11 +1767,11 @@ function renderGSTag(prog, crn, index) {
 
 //  دالة فحص المتدربين القدامى
 function checkOldStudentsAndExecute() {
-    let prefixes = traineesData.map(t => parseInt(String(t.id).substring(0, 3))).filter(n => !isNaN(n));
+    let prefixes = traineesData.map(t => parseInt(String(t.id).substring(0, 4))).filter(n => !isNaN(n));
     if (prefixes.length > 0) {
         globalCurrentTerm = Math.max(...prefixes);
         traineesData.forEach(t => {
-            let term = parseInt(String(t.id).substring(0, 3));
+            let term = parseInt(String(t.id).substring(0, 4));
             t.isOldStudent = !isNaN(term) && term < globalCurrentTerm;
         });
         globalOldStudents = traineesData.filter(t => t.isOldStudent);

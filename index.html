@@ -215,6 +215,20 @@
     box-shadow: 0 0 8px rgba(0, 142, 126, 0.3); border-color: #008e7e;
 }
 
+        /* ستايل قائمة البحث الذكية */
+.gs-search-container { position: relative; width: 100%; }
+.gs-search-input { width: 100%; padding: 8px; border: 1px solid var(--primary); border-radius: 4px; background: var(--bg-inset); color: var(--text-primary); }
+.gs-results-list { 
+    position: absolute; top: 100%; left: 0; right: 0; 
+    background: var(--bg-elevated); border: 1px solid var(--border-strong); 
+    max-height: 200px; overflow-y: auto; z-index: 1000; 
+    border-radius: 0 0 4px 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    display: none; /* مخفي افتراضياً */
+}
+.gs-result-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; transition: 0.2s; }
+.gs-result-item:hover { background: var(--primary-subtle); color: var(--primary); }
+.gs-result-item:last-child { border-bottom: none; }
+        
         /* ستايل نظام إدخال الأرقام المرجعية  */
 .crn-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 34px;}
 .crn-tag { padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: bold; color: #fff; display: flex; align-items: center; gap: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.2s;}
@@ -467,7 +481,7 @@
             </div>
             <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                <button onclick="prepareAutoGen()" style="background-color: #f39c12; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;">
-     توليد الرزم تلقائيًا
+     توليد الرزم آليًا
 </button>
                 <button onclick="deleteAllPackages()" style="background-color: #dc3545; color: #fff; border: none; padding: 8px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.3s; display: flex; align-items: center; gap: 5px;" onmouseover="this.style.backgroundColor='#c82333'" onmouseout="this.style.backgroundColor='#dc3545'" title="حذف جميع الرزم والبدء من جديد">
                     🗑️ حذف الكل
@@ -1674,11 +1688,31 @@ function openGSModal() {
 }
 
 // دالة لرسم القائمة المنسدلة (Dropdown) مع فلترة ذكية (مستوى أول + غير مختار)
+// 1. دالة رسم خانة البحث (Shell)
 function renderGSSelect(prog, index) {
     const selectContainer = document.getElementById(`gs-select-container-${index}`);
-    let selectedCrns = programGSMapping[prog] || [];
     
-    // 1. جلب بيانات الخطة (SC04) لهذا التخصص
+    selectContainer.innerHTML = `
+        <div class="gs-search-container">
+            <input type="text" 
+                   class="gs-search-input" 
+                   id="gs-input-${index}" 
+                   placeholder="🔍 ابحث برقم الشعبة أو اسم المقرر (مواد المستوى 1)..." 
+                   oninput="filterGSResults('${prog}', ${index})"
+                   onfocus="filterGSResults('${prog}', ${index})"
+                   autocomplete="off">
+            <div id="gs-results-${index}" class="gs-results-list"></div>
+        </div>
+    `;
+}
+
+//  محرك الفلترة الذكي 
+    function filterGSResults(prog, index) {
+    const input = document.getElementById(`gs-input-${index}`);
+    const resultsDiv = document.getElementById(`gs-results-${index}`);
+    const query = input.value.trim().toLowerCase();
+    const selectedCrns = programGSMapping[prog] || [];
+
     let planData = dynamicSC04Plan[prog];
     if (!planData) {
         for (let key in dynamicSC04Plan) {
@@ -1686,35 +1720,45 @@ function renderGSSelect(prog, index) {
         }
     }
 
-    let html = `<select onchange="addGSTag('${prog}', this.value, ${index})" style="width:100%; padding:5px; font-size:12px;">
-                <option value="">-- نأمل اختيار شعبة --</option>`;
-    
-    // 2. إذا توفرت الخطة وخيارات الدراسات العامة
-    if (window.globalGeneralStudiesOptions && planData) {
-        // توحيد أكواد المقررات الموجودة في خطة المستوى الأول لهذا التخصص لسهولة المقارنة
-        let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
-
-        window.globalGeneralStudiesOptions.forEach(opt => {
-            let details = globalCRNDetails[opt.crn];
-            if (!details) return;
-
-            // الحصول على كود المقرر للشعبة الحالية (مثلاً: انجل-101)
-            let courseNorm = globalNormalizeCode(details.course);
-
-            // 3. الشرط: يجب أن يكون المقرر موجوداً في خطة المستوى الأول لهذا التخصص
-            // وألا يكون قد تم اختياره مسبقاً في نفس القائمة
-            let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
-
-            if (isInPlan && !selectedCrns.includes(opt.crn)) {
-                html += `<option value="${opt.crn}">${opt.label}</option>`;
-            }
-        });
-    } else if (!planData) {
-        html = `<option value="">⚠️ عذراً: لم يتم العثور على خطة لهذا التخصص</option>`;
+    if (!planData || !window.globalGeneralStudiesOptions) {
+        resultsDiv.style.display = 'none';
+        return;
     }
 
-    html += `</select>`;
-    selectContainer.innerHTML = html;
+    let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
+
+    let filtered = window.globalGeneralStudiesOptions.filter(opt => {
+        let details = globalCRNDetails[opt.crn];
+        if (!details) return false;
+
+        let courseNorm = globalNormalizeCode(details.course);
+        
+        let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
+        
+        let isNotSelected = !selectedCrns.includes(opt.crn);
+        
+        let matchesQuery = opt.label.toLowerCase().includes(query) || opt.crn.includes(query);
+        
+        return isInPlan && isNotSelected && matchesQuery;
+    });
+
+    if (filtered.length > 0) {
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = filtered.map(opt => `
+            <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
+                <span style="font-weight:bold; color:var(--primary);">${opt.crn}</span> - ${globalCRNDetails[opt.crn].name}
+            </div>
+        `).join('');
+    } else {
+        resultsDiv.style.display = 'none';
+    }
+}
+
+// دالة اختيار العنصر من البحث
+function selectGSResult(prog, crn, index) {
+    addGSTag(prog, crn, index);
+    document.getElementById(`gs-results-${index}`).style.display = 'none';
+    document.getElementById(`gs-input-${index}`).value = '';
 }
 
 function addGSTag(prog, crn, index) {
@@ -1724,15 +1768,15 @@ function addGSTag(prog, crn, index) {
     
     programGSMapping[prog].push(crn);
     renderGSTag(prog, crn, index);
-    renderGSSelect(prog, index);
-    saveSessionState(); // حفظ فوري عند الإضافة
+    renderGSSelect(prog, index); // يعيد تصفير حقل البحث
+    saveSessionState();
 }
 
 function removeGSTag(prog, crn, element, index) {
     programGSMapping[prog] = programGSMapping[prog].filter(c => c !== crn);
     element.parentElement.remove();
-    renderGSSelect(prog, index);
-    saveSessionState(); // حفظ فوري عند الحذف
+    renderGSSelect(prog, index); // لتظهر الشعبة المحذوفة في البحث مجدداً
+    saveSessionState();
 }
 
 // دالة مساعدة لرسم التاج (Tag) ليحتوي على الرقم واسم المقرر
@@ -1765,6 +1809,52 @@ function renderGSTag(prog, crn, index) {
     container.appendChild(tag);
 }
 
+    function filterGSResults(prog, index) {
+    const input = document.getElementById(`gs-input-${index}`);
+    const resultsDiv = document.getElementById(`gs-results-${index}`);
+    const query = input.value.trim().toLowerCase();
+    const selectedCrns = programGSMapping[prog] || [];
+
+    // جلب الخطة للمطابقة
+    let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
+    if (!planData || !window.globalGeneralStudiesOptions) return;
+
+    let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
+
+    // فلترة المقررات (يجب أن تكون في الخطة + غير مختارة سابقاً + تطابق نص البحث)
+    let filtered = window.globalGeneralStudiesOptions.filter(opt => {
+        let details = globalCRNDetails[opt.crn];
+        if (!details) return false;
+
+        let courseNorm = globalNormalizeCode(details.course);
+        let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
+        
+        let matchesQuery = opt.label.toLowerCase().includes(query) || opt.crn.includes(query);
+        
+        return isInPlan && !selectedCrns.includes(opt.crn) && matchesQuery;
+    });
+
+    // عرض النتائج
+    if (filtered.length > 0) {
+        resultsDiv.style.display = 'block';
+        resultsDiv.innerHTML = filtered.map(opt => `
+            <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
+                ${opt.label}
+            </div>
+        `).join('');
+    } else {
+        resultsDiv.style.display = 'none';
+    }
+}
+
+// دالة وسيطة عند اختيار عنصر من البحث
+function selectGSResult(prog, crn, index) {
+    addGSTag(prog, crn, index);
+    // إخفاء القائمة وتصفير الحقل بعد الاختيار
+    document.getElementById(`gs-results-${index}`).style.display = 'none';
+    document.getElementById(`gs-input-${index}`).value = '';
+}
+    
 //  دالة فحص المتدربين القدامى
 function checkOldStudentsAndExecute() {
     let prefixes = traineesData.map(t => parseInt(String(t.id).substring(0, 4))).filter(n => !isNaN(n));
@@ -3262,6 +3352,13 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
         return [...new Set(errors)];
     }
 
+    document.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('gs-search-input')) {
+        document.querySelectorAll('.gs-results-list').forEach(list => {
+            list.style.display = 'none';
+        });
+    }
+});
     
 </script>
 
@@ -3408,7 +3505,7 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
             <div style="font-size: 15px; color: #333; text-align: right; line-height: 1.8; margin-bottom: 20px; background: #fdf2e9; padding: 15px; border-radius: 8px; border: 1px solid #fad7a1;">
                 اكتشف النظام وجود <strong id="old-students-count" style="color:#d35400; font-size: 18px;">0</strong> متدرب/ـة أرقامهم التدريبية أقدم من الفصل الحالي (<span id="current-term-display"></span>).<br>
                 قد يكون هؤلاء المتدربين (مؤجلين أو مطوي قيدهم سابقًا وعادوا للتدريب)، وقد يكون لديهم مقررات مجتازة.
-                <br><br><strong>كيف تود التعامل معهم؟</strong>
+                <br><br><strong>كيف تود/ين التعامل معهم؟</strong>
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
@@ -3423,7 +3520,7 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
     <div id="old-students-list-modal" class="modal-overlay" style="z-index: 100002;">
         <div class="modal-box" style="max-width: 700px; max-height: 80vh; display: flex; flex-direction: column;">
             <button class="modal-close" onclick="closeOldStudentsList()">✖</button>
-            <h2 style="text-align:center; color:#34495e; margin-top:0; border-bottom: 2px dashed #ccc; padding-bottom: 10px;">قائمة المؤجلين/ معاد قيدهم</h2>
+            <h2 style="text-align:center; color:#34495e; margin-top:0; border-bottom: 2px dashed #ccc; padding-bottom: 10px;">قائمة المؤجلين/ المعاد قيدهم</h2>
             
             <div style="overflow-y: auto; flex-grow: 1; margin-bottom: 15px;">
                 <table class="schedule-h-table" style="font-size: 14px;">
@@ -3446,6 +3543,7 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
     <div class="modal-box" style="max-width: 900px; max-height: 85vh;">
         <h2 style="text-align:center; color:var(--primary); margin-top:0;">تحديد شعب الدراسات العامة لكل تخصص</h2>
         <p style="text-align:center; font-size:13px; color:#666;">نأمل اختيار الشعب التي سيتم إضافتها تلقائياً لكل رزمة حسب التخصص</p>
+        <p style="text-align:center; font-size:13px; color:#666;">عدم إضافة مقرر معين يعني أنه سيتم اختيار شعبه بشكل مرن</p>
         <p style="text-align:center; font-size:13px; color:#e00236;">في حال عدم الرغبة في التخصيص، نأمل الضغط على زر الإلغاء وإزالة العلامة من الخيار في أعلى الصفحة</p>
         
         <div id="gs-programs-container" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; overflow-y: auto; max-height: 50vh; padding: 10px; border: 1px solid var(--border); border-radius: 8px;">

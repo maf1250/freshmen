@@ -1703,6 +1703,59 @@ function openGSModal() {
     document.body.style.overflow = 'hidden';
 }
 
+function getPlanForProgram(programName) {
+    if (!programName || !dynamicSC04Plan) return null;
+    
+    // أ- محاولة المطابقة المباشرة (سريع)
+    if (dynamicSC04Plan[programName]) return dynamicSC04Plan[programName];
+
+    // ب- البحث الذكي في كل أسماء الخطط المرفقة باستخدام دالة المطابقة
+    let keys = Object.keys(dynamicSC04Plan);
+    let matchedKey = keys.find(k => isProgramMatch(programName, k));
+    
+    return matchedKey ? dynamicSC04Plan[matchedKey] : null;
+}
+
+// دالة المطابقة الذكية المحدثة (النسخة الخارقة)
+function isProgramMatch(prog1, prog2) {
+    if (!prog1 || !prog2) return false;
+
+    // 1. تنظيف الأسماء من الضوضاء الإدارية
+    const normalize = (s) => {
+        return String(s)
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/ى/g, 'ي')
+            .replace(/[\s\-_]/g, '')
+            .replace(/دبلوم|بكالوريوس|تقنيه|تقنية|قسم|تخصص|برنامج/g, '')
+            .toLowerCase();
+    };
+
+    let c1 = normalize(prog1);
+    let c2 = normalize(prog2);
+
+    // 2. فحص المطابقة المباشرة أو الاحتواء
+    if (c1 === c2 || c1.includes(c2) || c2.includes(c1)) return true;
+
+    // 3. خوارزمية التشابه (Bigrams) للحماية من الأخطاء الإملائية
+    if (c1.length < 2 || c2.length < 2) return false;
+
+    const getBigrams = (str) => {
+        let bigrams = new Set();
+        for (let i = 0; i < str.length - 1; i++) {
+            bigrams.add(str.substring(i, i + 2));
+        }
+        return bigrams;
+    };
+
+    let set1 = getBigrams(c1);
+    let set2 = getBigrams(c2);
+    let intersection = 0;
+    for (let bit of set1) { if (set2.has(bit)) intersection++; }
+
+    let similarity = (2.0 * intersection) / (set1.size + set2.size);
+    return similarity >= 0.60;
+}
 // 1. دالة رسم خانة البحث (Shell)
 function renderGSSelect(prog, index) {
     const selectContainer = document.getElementById(`gs-select-container-${index}`);

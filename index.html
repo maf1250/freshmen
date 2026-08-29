@@ -215,19 +215,34 @@
     box-shadow: 0 0 8px rgba(0, 142, 126, 0.3); border-color: #008e7e;
 }
 
-        /* ستايل قائمة البحث الذكية */
-.gs-search-container { position: relative; width: 100%; }
+    .gs-search-container { position: relative; width: 100%; }
 .gs-search-input { width: 100%; padding: 8px; border: 1px solid var(--primary); border-radius: 4px; background: var(--bg-inset); color: var(--text-primary); }
+
 .gs-results-list { 
-    position: absolute; top: 100%; left: 0; right: 0; 
-    background: var(--bg-elevated); border: 1px solid var(--border-strong); 
-    max-height: 200px; overflow-y: auto; z-index: 1000; 
-    border-radius: 0 0 4px 4px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-    display: none; /* مخفي افتراضياً */
+    position: absolute; 
+    top: 100%; 
+    left: 0; 
+    right: 0; 
+    background-color: var(--bg-elevated); 
+    border: 1px solid var(--primary); 
+    max-height: 200px; 
+    overflow-y: auto; 
+    /* رفع قيمة التداخل لتكون أعلى من المودال */
+    z-index: 999999 !important; 
+    border-radius: 0 0 6px 6px; 
+    box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+    display: none;
 }
-.gs-result-item { padding: 8px 12px; cursor: pointer; border-bottom: 1px solid var(--border); font-size: 12px; transition: 0.2s; }
-.gs-result-item:hover { background: var(--primary-subtle); color: var(--primary); }
-.gs-result-item:last-child { border-bottom: none; }
+
+.gs-result-item { 
+    padding: 10px 12px; 
+    cursor: pointer; 
+    border-bottom: 1px solid var(--border); 
+    font-size: 13px; 
+    color: var(--text-primary);
+    background: var(--bg-surface);
+}
+.gs-result-item:hover { background-color: var(--primary); color: white; }
         
         /* ستايل نظام إدخال الأرقام المرجعية  */
 .crn-tags-container { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; min-height: 34px;}
@@ -1710,33 +1725,26 @@ function renderGSSelect(prog, index) {
             <input type="text" 
                    class="gs-search-input" 
                    id="gs-input-${index}" 
-                   placeholder="🔍 ابحث برقم الشعبة أو اسم المقرر..." 
+                   placeholder="🔍 ابحث برقم الشعبة أو المقرر..." 
                    oninput="filterGSResults('${prog}', ${index})"
-                   onfocus="filterGSResults('${prog}', ${index})" 
-                   onclick="filterGSResults('${prog}', ${index})"
+                   onfocus="filterGSResults('${prog}', ${index})"
                    autocomplete="off">
             <div id="gs-results-${index}" class="gs-results-list"></div>
         </div>
     `;
 }
 
-// 2. محرك الفلترة (محدث بخوارزمية مطابقة فائقة المرونة)
 function filterGSResults(prog, index) {
     const input = document.getElementById(`gs-input-${index}`);
     const resultsDiv = document.getElementById(`gs-results-${index}`);
-    const query = globalNormalizeCode(input.value); // توحيد نص البحث
+    const rawQuery = input.value.trim();
+    const query = globalNormalizeCode(rawQuery); // توحيد نص البحث
     const selectedCrns = programGSMapping[prog] || [];
 
-    let planData = dynamicSC04Plan[prog];
-    if (!planData) {
-        for (let key in dynamicSC04Plan) {
-            if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
-        }
-    }
-
+    // جلب الخطة
+    let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
     if (!planData || !window.globalGeneralStudiesOptions) return;
 
-    // توحيد جميع مواد الخطة للمقارنة
     let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
 
     let filtered = window.globalGeneralStudiesOptions.filter(opt => {
@@ -1745,16 +1753,12 @@ function filterGSResults(prog, index) {
 
         let courseNorm = globalNormalizeCode(details.course);
         let courseNameNorm = globalNormalizeCode(details.name);
-        let crnNorm = opt.crn.toString();
-
-        // أ- هل المادة في الخطة؟ (مطابقة مرنة جداً)
-        let isInPlan = planCoursesNorm.some(pNorm => 
-            courseNorm.includes(pNorm) || pNorm.includes(courseNorm)
-        );
         
-        // ب- هل تطابق البحث؟ (البحث في الرقم، الرمز، أو الاسم)
-        let matchesQuery = query === "" || 
-                           crnNorm.includes(query) || 
+        // هل المادة في الخطة؟
+        let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
+        // هل تطابق البحث (البحث في الرقم أو الرمز أو الاسم)؟
+        let matchesQuery = (rawQuery === "") || 
+                           opt.crn.includes(rawQuery) || 
                            courseNorm.includes(query) || 
                            courseNameNorm.includes(query);
         
@@ -1762,18 +1766,18 @@ function filterGSResults(prog, index) {
     });
 
     if (filtered.length > 0) {
-        resultsDiv.style.display = 'block';
         resultsDiv.innerHTML = filtered.map(opt => {
             let det = globalCRNDetails[opt.crn];
             return `
-            <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
-                <strong style="font-size:14px;">${opt.crn}</strong> | ${det.course} <br>
-                <span style="font-size:11px; color:#666;">${det.name} (${det.instructor})</span>
-            </div>
-        `}).join('');
+                <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
+                    <strong>${opt.crn}</strong> | ${det.course} <br>
+                    <small style="opacity:0.8">${det.name}</small>
+                </div>
+            `;
+        }).join('');
+        resultsDiv.style.display = 'block'; // إظهار القائمة
     } else {
-        resultsDiv.innerHTML = `<div style="padding:10px; font-size:12px; color:#999; text-align:center;">لا توجد نتائج تطابق بحثك في الخطة</div>`;
-        resultsDiv.style.display = 'block';
+        resultsDiv.style.display = 'none'; // إخفاء إذا لا توجد نتائج
     }
 }
 

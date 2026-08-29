@@ -3313,7 +3313,7 @@ async function restoreSessionState() {
                 setupPage3();
                 switchPage('page-3');
             }
-            showToast("🔄 تم استعادة البيانات وتخصيص الدراسات العامة");
+            showToast("🔄 تم استعادة البيانات");
         }
     } catch (e) {
         console.warn("لا توجد جلسة سابقة.");
@@ -3517,7 +3517,7 @@ window.addEventListener('DOMContentLoaded', restoreSessionState);
             <div style="font-size: 15px; color: #333; text-align: right; line-height: 1.8; margin-bottom: 20px; background: #fdf2e9; padding: 15px; border-radius: 8px; border: 1px solid #fad7a1;">
                 اكتشف النظام وجود <strong id="old-students-count" style="color:#d35400; font-size: 18px;">0</strong> متدرب/ـة أرقامهم التدريبية أقدم من الفصل الحالي (<span id="current-term-display"></span>).<br>
                 قد يكون هؤلاء المتدربين (مؤجلين أو مطوي قيدهم سابقًا وعادوا للتدريب)، وقد يكون لديهم مقررات مجتازة.
-                <br><br><strong>كيف تود/ين التعامل معهم؟</strong>
+                <br><br><strong>كيف نتعامل معهم؟</strong>
             </div>
             
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">

@@ -1716,7 +1716,7 @@ function getPlanForProgram(programName) {
     return matchedKey ? dynamicSC04Plan[matchedKey] : null;
 }
 
-// دالة المطابقة الذكية المحدثة (النسخة الخارقة)
+// دالة المطابقة الذكية 
 function isProgramMatch(prog1, prog2) {
     if (!prog1 || !prog2) return false;
 
@@ -3035,54 +3035,7 @@ function parseTimeToMinutes(timeStr) {
         document.getElementById('plan-modal').style.display = 'none';
         document.body.style.overflow = '';
     }
-
-function isProgramMatch(prog1, prog2) {
-    if (!prog1 || !prog2) return false;
-
-    // 1. دالة التنظيف العميق (لإزالة الضوضاء الإدارية)
-    const normalize = (s) => {
-        return String(s)
-            .replace(/[أإآ]/g, 'ا')
-            .replace(/ة/g, 'ه')
-            .replace(/ى/g, 'ي')
-            .replace(/[\s\-_]/g, '')
-            // حذف الكلمات التي تحجب اسم التخصص الحقيقي
-            .replace(/دبلوم|بكالوريوس|تقنيه|تقنية|قسم|تخصص|برنامج/g, '')
-            .toLowerCase();
-    };
-
-    let c1 = normalize(prog1);
-    let c2 = normalize(prog2);
-
-    // 2. فحص المطابقة المباشرة أو الاحتواء (سريع)
-    if (c1 === c2 || c1.includes(c2) || c2.includes(c1)) return true;
-
-    // 3. إذا فشل الاحتواء، نستخدم خوارزمية التشابه (Bigrams) من النسخة القديمة
-    // لضمان دقة المطابقة في حال وجود أخطاء إملائية بسيطة
-    if (c1.length < 2 || c2.length < 2) return false;
-
-    const getBigrams = (str) => {
-        let bigrams = new Set();
-        for (let i = 0; i < str.length - 1; i++) {
-            bigrams.add(str.substring(i, i + 2));
-        }
-        return bigrams;
-    };
-
-    let set1 = getBigrams(c1);
-    let set2 = getBigrams(c2);
-    let intersection = 0;
-
-    for (let bit of set1) {
-        if (set2.has(bit)) intersection++;
-    }
-
-    let similarity = (2.0 * intersection) / (set1.size + set2.size);
-    
-    // نعتبره تطابقاً إذا كانت النسبة أكثر من 60% (تم خفضها قليلاً لزيادة المرونة بعد التنظيف)
-    return similarity >= 0.60;
-}
-    
+   
 // فتح نافذة المراسلة
 function openContactModal() {
     document.getElementById('contact-modal').style.display = 'flex';

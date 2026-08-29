@@ -216,29 +216,29 @@
 }
 
 .gs-search-container { position: relative; width: 100%; }
-.gs-search-input { width: 100%; padding: 8px; border: 2px solid var(--primary) !important; border-radius: 4px; background: var(--bg-inset); color: var(--text-primary); }
+.gs-search-input { 
+    width: 100%; padding: 10px; 
+    border: 2px solid var(--primary) !important; 
+    border-radius: 6px; background: var(--bg-inset); 
+    color: var(--text-primary); font-family: inherit; 
+}
 
 .gs-results-list { 
     position: absolute; 
-    top: 100%; 
-    left: 0; 
-    right: 0; 
+    top: 100%; left: 0; right: 0; 
     background-color: var(--bg-elevated) !important; 
     border: 1px solid var(--primary); 
-    max-height: 250px; 
-    overflow-y: auto; 
-    z-index: 9999999 !important; /* قيمة عالية جداً */
-    border-radius: 0 0 6px 6px; 
+    max-height: 200px; overflow-y: auto; 
+    z-index: 2147483647 !important; /* أقصى قيمة ممكنة للـ z-index */
+    border-radius: 0 0 8px 8px; 
     box-shadow: 0 10px 25px rgba(0,0,0,0.4);
     display: none;
 }
 
 .gs-result-item { 
-    padding: 10px 12px; 
-    cursor: pointer; 
+    padding: 10px 15px; cursor: pointer; 
     border-bottom: 1px solid var(--border); 
-    font-size: 13px; 
-    color: var(--text-primary) !important;
+    font-size: 13px; color: var(--text-primary) !important;
     background: var(--bg-surface) !important;
 }
 .gs-result-item:hover { background-color: var(--primary) !important; color: white !important; }
@@ -1703,19 +1703,14 @@ function openGSModal() {
     document.body.style.overflow = 'hidden';
 }
 
-// 1. دالة رسم خانة البحث
+// 1. دالة رسم خانة البحث (Shell)
 function renderGSSelect(prog, index) {
     const selectContainer = document.getElementById(`gs-select-container-${index}`);
     
-    let planData = dynamicSC04Plan[prog];
-    if (!planData) {
-        for (let key in dynamicSC04Plan) {
-            if (isProgramMatch(prog, key)) { planData = dynamicSC04Plan[key]; break; }
-        }
-    }
+    let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
 
     if (!planData) {
-        selectContainer.innerHTML = `<div style="color:#dc3545; font-size:11px; padding:8px; border:1px dashed #dc3545; border-radius:4px; background:rgba(220,53,69,0.05); text-align:center;">⚠️ لم يتم العثور على خطة لهذا التخصص</div>`;
+        selectContainer.innerHTML = `<div style="color:#dc3545; font-size:11px; padding:10px; border:1px dashed #dc3545; border-radius:6px; background:rgba(220,53,69,0.05); text-align:center;">⚠️ لم يتم العثور على خطة (SC04) لهذا التخصص</div>`;
         return;
     }
 
@@ -1727,14 +1722,14 @@ function renderGSSelect(prog, index) {
                    placeholder="🔍 ابحث برقم الشعبة أو المقرر..." 
                    oninput="filterGSResults('${prog}', ${index})"
                    onfocus="filterGSResults('${prog}', ${index})"
-                   onkeydown="handleGSEnter(event, '${prog}', ${index})"
+                   onkeydown="if(event.key==='Enter') handleGSEnter('${prog}', ${index})"
                    autocomplete="off">
             <div id="gs-results-${index}" class="gs-results-list"></div>
         </div>
     `;
 }
 
-// 2. محرك الفلترة الذكي
+// 2. محرك الفلترة الذكي (دمج الخطة مع نص البحث)
 function filterGSResults(prog, index) {
     const input = document.getElementById(`gs-input-${index}`);
     const resultsDiv = document.getElementById(`gs-results-${index}`);
@@ -1764,34 +1759,21 @@ function filterGSResults(prog, index) {
     });
 
     if (filtered.length > 0) {
-        resultsDiv.innerHTML = filtered.map((opt, i) => {
-            let det = globalCRNDetails[opt.crn];
-            return `
-                <div class="gs-result-item" id="gs-item-${index}-${i}" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
-                    <strong>${opt.crn}</strong> | ${det.course} <br>
-                    <small style="opacity:0.8">${det.name} (${det.instructor})</small>
-                </div>
-            `;
-        }).join('');
+        resultsDiv.innerHTML = filtered.map(opt => `
+            <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
+                <strong>${opt.crn}</strong> | ${globalCRNDetails[opt.crn].course} <br>
+                <small style="opacity:0.8">${globalCRNDetails[opt.crn].name}</small>
+            </div>
+        `).join('');
         resultsDiv.style.display = 'block';
     } else {
         resultsDiv.style.display = 'none';
     }
 }
 
-// 3. معالجة الضغط على Enter
-function handleGSEnter(event, prog, index) {
-    if (event.key === 'Enter') {
-        const resultsDiv = document.getElementById(`gs-results-${index}`);
-        const firstItem = resultsDiv.querySelector('.gs-result-item');
-        if (firstItem) {
-            firstItem.click(); // اختيار أول نتيجة تلقائياً
-        }
-    }
-}
-
-// 4. دالة اختيار النتيجة
+// 3. معالجة اختيار النتيجة (عند النقر أو الانتر)
 function selectGSResult(prog, crn, index) {
+    if (!crn) return;
     addGSTag(prog, crn, index);
     const resultsDiv = document.getElementById(`gs-results-${index}`);
     const input = document.getElementById(`gs-input-${index}`);
@@ -1799,69 +1781,25 @@ function selectGSResult(prog, crn, index) {
     if(input) input.value = '';
 }
 
-function filterGSResults(prog, index) {
-    const input = document.getElementById(`gs-input-${index}`);
+// 4. معالجة زر الانتر
+function handleGSEnter(prog, index) {
     const resultsDiv = document.getElementById(`gs-results-${index}`);
-    const rawQuery = input.value.trim();
-    const query = globalNormalizeCode(rawQuery); // توحيد نص البحث
-    const selectedCrns = programGSMapping[prog] || [];
-
-    // جلب الخطة
-    let planData = dynamicSC04Plan[prog] || Object.values(dynamicSC04Plan).find(p => isProgramMatch(prog, p));
-    if (!planData || !window.globalGeneralStudiesOptions) return;
-
-    let planCoursesNorm = planData.courses.map(c => globalNormalizeCode(c));
-
-    let filtered = window.globalGeneralStudiesOptions.filter(opt => {
-        let details = globalCRNDetails[opt.crn];
-        if (!details) return false;
-
-        let courseNorm = globalNormalizeCode(details.course);
-        let courseNameNorm = globalNormalizeCode(details.name);
-        
-        // هل المادة في الخطة؟
-        let isInPlan = planCoursesNorm.some(pNorm => courseNorm.includes(pNorm) || pNorm.includes(courseNorm));
-        // هل تطابق البحث (البحث في الرقم أو الرمز أو الاسم)؟
-        let matchesQuery = (rawQuery === "") || 
-                           opt.crn.includes(rawQuery) || 
-                           courseNorm.includes(query) || 
-                           courseNameNorm.includes(query);
-        
-        return isInPlan && !selectedCrns.includes(opt.crn) && matchesQuery;
-    });
-
-    if (filtered.length > 0) {
-        resultsDiv.innerHTML = filtered.map(opt => {
-            let det = globalCRNDetails[opt.crn];
-            return `
-                <div class="gs-result-item" onclick="selectGSResult('${prog}', '${opt.crn}', ${index})">
-                    <strong>${opt.crn}</strong> | ${det.course} <br>
-                    <small style="opacity:0.8">${det.name}</small>
-                </div>
-            `;
-        }).join('');
-        resultsDiv.style.display = 'block'; // إظهار القائمة
-    } else {
-        resultsDiv.style.display = 'none'; // إخفاء إذا لا توجد نتائج
+    const firstItem = resultsDiv.querySelector('.gs-result-item');
+    if (firstItem) {
+        firstItem.click(); // اختيار أول نتيجة تظهر
     }
 }
 
-// دالة اختيار العنصر من البحث
-function selectGSResult(prog, crn, index) {
-    addGSTag(prog, crn, index);
-    document.getElementById(`gs-results-${index}`).style.display = 'none';
-    document.getElementById(`gs-input-${index}`).value = '';
-}
-
+// 5. إضافة التاج الأخضر (النسخة الموحدة)
 function addGSTag(prog, crn, index) {
     if (!crn) return;
     if (!programGSMapping[prog]) programGSMapping[prog] = [];
     if (programGSMapping[prog].includes(crn)) return;
     
     programGSMapping[prog].push(crn);
-    renderGSTag(prog, crn, index);
-    renderGSSelect(prog, index); // يعيد تصفير حقل البحث
-    saveSessionState();
+    renderGSTag(prog, crn, index); // تظهر التاج في الأسفل
+    renderGSSelect(prog, index);   // تصفير البحث
+    saveSessionState();            // حفظ البيانات
 }
 
 function removeGSTag(prog, crn, element, index) {

@@ -1513,29 +1513,80 @@ function autoGeneratePackages(defaultCap) {
                 let pool = { theory: [], practical: [] };
 
                 // --- وظيفة التصنيف الذكي داخل التوليد الآلي ---
-                const processAndCategorize = (crn) => {
-                    let d = globalCRNDetails[crn];
-                    let typeStr = String(d.type).toLowerCase();
-                    let nameStr = String(d.name).toLowerCase();
-                    
-                    let isTheory = typeStr.includes('نظري') || typeStr.includes('محاضرة');
-                    let isPractical = typeStr.includes('عملي') || typeStr.includes('تدريب');
+                const processAndCategorize = (crnsForThisCourse, planCourse) => {
+    let normPlanCourse = globalNormalizeCode(planCourse);
+    let plan = null;
+    if (dynamicSC04Plan[prog]) {
+        plan = dynamicSC04Plan[prog].courseDetails[normPlanCourse];
+    } else {
+        let matchedKey = Object.keys(dynamicSC04Plan).find(k => isProgramMatch(prog, k));
+        if (matchedKey) plan = dynamicSC04Plan[matchedKey].courseDetails[normPlanCourse];
+    }
 
-                    // فحص الأنماط الخاصة (مدمج، ذاتي، عن بعد)
-                    if (typeStr.includes('مدمج') || typeStr.includes('عن بعد') || typeStr.includes('ذاتي')) {
-                        if (!isTheory && !isPractical) {
-                            if (nameStr.includes('عملي')) isPractical = true;
-                            else if (nameStr.includes('نظري')) isTheory = true;
-                            else { isTheory = true; isPractical = true; } // إذا لم يحدد، نعتبرها صالحة للاثنين
-                        }
-                    }
+    if (!plan) return;
 
-                    // إذا لم يتم التصنيف بعد كل المحاولات، نعتبرها نظري كافتراضي
-                    if (!isTheory && !isPractical) isTheory = true;
+    // مصفوفات تصنيف مؤقتة
+    let explicitTheory = [];
+    let explicitPractical = [];
+    let ambiguous = [];
 
-                    if (isTheory) pool.theory.push(crn);
-                    if (isPractical) pool.practical.push(crn);
-                };
+    crnsForThisCourse.forEach(crn => {
+        let d = globalCRNDetails[crn];
+        let typeStr = String(d.type).toLowerCase();
+        
+        // 1. فرز الشعب بناءً على التصنيف الصريح أولاً
+        if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
+            explicitTheory.push(crn);
+        } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
+            explicitPractical.push(crn);
+        } else {
+            // أي نوع آخر (مدمج، عن بعد، ذاتي) يعتبر غامضاً حالياً
+            ambiguous.push(crn);
+        }
+    });
+
+    // 2. توزيع الشعب الصريحة في المجمع الرئيسي (Pool)
+    explicitTheory.forEach(c => pool.theory.push(c));
+    explicitPractical.forEach(c => pool.practical.push(c));
+
+    // 3. معالجة الشعب الغامضة (الاستبعاد الذكي)
+    ambiguous.forEach(crn => {
+        let d = globalCRNDetails[crn];
+        let ss01Hours = parseFloat(d.hours);
+        let nameStr = String(d.name).toLowerCase();
+
+        if (plan.theory > 0 && plan.practical === 0) {
+            pool.theory.push(crn);
+        } else if (plan.practical > 0 && plan.theory === 0) {
+            pool.practical.push(crn);
+        } 
+        else if (plan.theory > 0 && plan.practical > 0) {
+            
+      
+            if (explicitPractical.length > 0 && explicitTheory.length === 0) {
+                pool.theory.push(crn);
+            } else if (explicitTheory.length > 0 && explicitPractical.length === 0) {
+                pool.practical.push(crn);
+            } 
+         
+                
+            else {
+                if (nameStr.includes('عملي')) {
+                    pool.practical.push(crn);
+                } else if (nameStr.includes('نظري')) {
+                    pool.theory.push(crn);
+                } else if (ss01Hours === plan.theory) {
+                    pool.theory.push(crn);
+                } else if (ss01Hours === plan.practical) {
+                    pool.practical.push(crn);
+                } else {
+                    pool.theory.push(crn);
+                    pool.practical.push(crn);
+                }
+            }
+        }
+    });
+};
 
                 // البحث عن الخيارات المتاحة
                 let optionsForThisCourse = [];
@@ -1556,7 +1607,7 @@ function autoGeneratePackages(defaultCap) {
                 }
 
                 // تصنيف الخيارات المختارة
-                optionsForThisCourse.forEach(crn => processAndCategorize(crn));
+                processAndCategorize(optionsForThisCourse, planCourse);
 
                 // تطبيق منطق "الموازنة المستقرة" (الأكثر مقاعد أولاً)
                 const balanceSort = (list) => [...new Set(list)]

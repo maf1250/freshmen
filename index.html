@@ -1711,13 +1711,34 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
         if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:5px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة بنجاح.</div>`);
     });
 
-    // حفظ وتحديث الواجهة
+   // حفظ وتحديث الواجهة (منطق التنظيم بعد التوليد)
     if (generatedPackages.length > 0) {
-        document.getElementById('num-packages').value = generatedPackages.length;
-        localStorage.setItem('numPackages', generatedPackages.length);
-        let storageData = generatedPackages.map((p, idx) => ({ id: idx + 1, prog: p.prog, cap: p.cap, crns: p.crns }));
+        // 1. إعادة ترتيب الرزم الناتجة أبجدياً حسب اسم التخصص
+        generatedPackages.sort((a, b) => a.prog.localeCompare(b.prog, 'ar'));
+
+        // 2. إعطاء أرقام (IDs) جديدة متسلسلة بناءً على الترتيب الجديد
+        let storageData = generatedPackages.map((p, idx) => ({ 
+            id: idx + 1,        // الرقم الجديد 1, 2, 3...
+            prog: p.prog, 
+            cap: p.cap, 
+            crns: p.crns 
+        }));
+
+        // 3. تحديث العداد والذاكرة
+        document.getElementById('num-packages').value = storageData.length;
+        localStorage.setItem('numPackages', storageData.length);
         localStorage.setItem('savedPackages', JSON.stringify(storageData));
-        loadPackagesFromLocal();
+
+        // 4. تحديث المتغير العالمي لضمان المزامنة مع زر "تنفيذ الإسناد"
+        packagesData = storageData.map(p => ({
+            id: p.id,
+            program: p.prog,
+            maxCapacity: parseInt(p.cap),
+            crns: p.crns.split(/[\s,،]+/).filter(c => c.trim() !== ""),
+            currentCount: 0
+        }));
+
+        loadPackagesFromLocal(); 
         saveSessionState();
     }
     document.getElementById('ai-log-content').innerHTML = aiLog.join('');

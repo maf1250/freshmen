@@ -424,12 +424,12 @@
         </div>
 
         <div class="upload-group">
-            <label>3. تقرير الشعب والشعب المرتبطة (SF33) [اختياري لضمان ارتباط الشق النظري بالعملي]</label>
+            <label>3. تقرير الشعب والشعب المرتبطة (SF33) [لضمان ارتباط الشق النظري بالعملي]</label>
             <input type="file" id="sf33File" accept=".csv">
         </div>
         
         <div class="upload-group">
-            <label>4. تقرير الخطط التدريبية (SC04) [اختياري لمقارنة الخطة]</label>
+            <label>4. تقرير الخطط التدريبية (SC04) [لمقارنة الخطة]</label>
             <input type="file" id="sc04File" accept=".csv" multiple title="يمكنك تحديد أكثر من ملف بالضغط على زر Ctrl">
         </div>
        
@@ -702,9 +702,14 @@ async function getFromDB(key) {
 async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
         const ss01File = document.getElementById('ss01File').files[0];
+        const sf33File = document.getElementById('sf33File').files[0]; 
+        const sc04File = document.getElementById('sc04File').files[0]; 
         const status = document.getElementById('status-1');
         
-        if (!sp15File) { status.innerText = 'الرجاء إرفاق ملف قائمة المستجدين (SP15)'; return; }
+        if (!sp15File || !ss01File || !sf33File || !sc04File) { 
+        status.innerText = '⚠️ عذراً، يجب إرفاق كافة التقارير الأربعة (SP15, SS01, SF33, SC04) لضمان دقة الإسناد الآلي.'; 
+        return; 
+    }
 
         document.getElementById('loader-1').style.display = 'inline-block';
         document.getElementById('btnText-1').innerText = 'جارِ المعالجة...';
@@ -1517,7 +1522,7 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
     let normPlanCourse = globalNormalizeCode(planCourse);
     let plan = null;
     
-    // جلب بيانات الخطة (SC04)
+    // 1. جلب بيانات الساعات من SC04 (مح، عم)
     if (dynamicSC04Plan[prog]) {
         plan = dynamicSC04Plan[prog].courseDetails[normPlanCourse];
     } else {
@@ -1530,20 +1535,17 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
     crnsForThisCourse.forEach(crn => {
         let d = globalCRNDetails[crn];
         let typeStr = String(d.type).toLowerCase();
-        
         let isTheory = false;
         let isPractical = false;
 
-        // 1. الفحص الصريح (نظري/عملي)
+        // أ- الفحص الصريح من واقع الجدول (SS01)
         if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
             isTheory = true;
         } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
             isPractical = true;
         } 
-        
-        // 2. إذا كان النوع (مدمج/ذاتي/غامض) -> نستخدم ملف SF33 للربط
+        // ب- معالجة الشعب الغامضة (مدمج/ذاتي) باستخدام الارتباط (SF33)
         else {
-            // نبحث عن أي شعبة مرتبطة في ملف SF33
             let linkedCRNs = globalLinkedCRNs[crn]; 
             let foundByLink = false;
 
@@ -1552,37 +1554,33 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
                     let linkedDetail = globalCRNDetails[linkedCrn];
                     if (linkedDetail) {
                         let linkedType = String(linkedDetail.type).toLowerCase();
-                        
-                        // "ذكاء الارتباط": إذا كان المرتبط نظري، فأنا عملي.. والعكس
+                        // إذا كان المرتبط صريحاً، فالشعبة الحالية هي المكملة
                         if (linkedType.includes('عملي') || linkedType.includes('تدريب')) {
-                            isTheory = true;
-                            foundByLink = true;
-                            break;
+                            isTheory = true; foundByLink = true; break;
                         } else if (linkedType.includes('نظري') || linkedType.includes('محاضرة')) {
-                            isPractical = true;
-                            foundByLink = true;
-                            break;
+                            isPractical = true; foundByLink = true; break;
                         }
                     }
                 }
             }
 
-            // 3. إذا لم نجد ارتباطاً في SF33، نستخدم منطق "الاستبعاد" من الخطة
+            // ج- إذا فشل الارتباط، نلجأ لمقارنة الساعات (SC04)
             if (!foundByLink) {
+                let ss01Hours = parseFloat(d.hours);
                 if (plan.theory > 0 && plan.practical === 0) {
                     isTheory = true;
                 } else if (plan.practical > 0 && plan.theory === 0) {
                     isPractical = true;
+                } else if (ss01Hours === plan.theory && ss01Hours !== plan.practical) {
+                    isTheory = true;
+                } else if (ss01Hours === plan.practical && ss01Hours !== plan.theory) {
+                    isPractical = true;
                 } else {
+                    // د- حالة الغموض القصوى (مثلاً ساعات متساوية) نفحص الاسم
                     let nameStr = String(d.name).toLowerCase();
                     if (nameStr.includes('عملي')) isPractical = true;
                     else if (nameStr.includes('نظري')) isTheory = true;
-                    else if (parseFloat(d.hours) === plan.theory) isTheory = true;
-                    else if (parseFloat(d.hours) === plan.practical) isPractical = true;
-                    else {
-                        // حالة الغموض القصوى
-                        isTheory = true; isPractical = true;
-                    }
+                    else { isTheory = true; isPractical = true; } // جرب الاثنين
                 }
             }
         }

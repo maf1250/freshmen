@@ -1116,7 +1116,11 @@ function handleCRNInput(event, pkgId) {
         
         container.appendChild(tag);
         
-        if (!skipUpdate) updateHiddenCRNs(pkgId);
+        if (!skipUpdate) {
+        updateHiddenCRNs(pkgId);
+        savePackagesToLocal(); // حفظ في localStorage
+        saveSessionState();    // حفظ الجلسة كاملة في IndexedDB
+    }
     }
 
     function updateHiddenCRNs(pkgId) {
@@ -1139,24 +1143,32 @@ function handleCRNInput(event, pkgId) {
             tag.className = `crn-tag ${newColor}`;
         });
         savePackagesToLocal();
+        saveSessionState();
     }
 
-    function savePackagesToLocal() {
-        const num = parseInt(document.getElementById('num-packages').value) || 1;
-        let pkgs = [];
-        for (let i = 1; i <= num; i++) {
-            let prog = document.getElementById(`pkg-program-${i}`);
-            let cap = document.getElementById(`pkg-capacity-${i}`);
-            let crns = document.getElementById(`pkg-crns-${i}`);
-            if (prog) {
-                pkgs.push({ id: i, prog: prog.value, cap: cap.value, crns: crns.value });
-            }
-        }
-        if (pkgs.length > 0) {
-            localStorage.setItem('savedPackages', JSON.stringify(pkgs));
-            localStorage.setItem('numPackages', pkgs.length);
+   function savePackagesToLocal() {
+    const num = parseInt(document.getElementById('num-packages').value) || 1;
+    let pkgs = [];
+    for (let i = 1; i <= num; i++) {
+        let prog = document.getElementById(`pkg-program-${i}`);
+        let cap = document.getElementById(`pkg-capacity-${i}`);
+        let crns = document.getElementById(`pkg-crns-${i}`);
+        if (prog) {
+            pkgs.push({ 
+                id: i, 
+                program: prog.value, 
+                maxCapacity: parseInt(cap.value), 
+                crns: crns.value.split(/[\s,،]+/).filter(c => c.trim() !== "") 
+            });
         }
     }
+    if (pkgs.length > 0) {
+        localStorage.setItem('savedPackages', JSON.stringify(pkgs));
+        localStorage.setItem('numPackages', pkgs.length);
+        
+        packagesData = pkgs; 
+    }
+}
 
   // 1. دالة إضافة رزمة جديدة عبر الزر (+)
 function addNewPackage() {
@@ -1275,50 +1287,46 @@ function deletePackage(pkgIdToRemove) {
     document.getElementById('num-packages').value = newNum;
     localStorage.setItem('numPackages', newNum);
     localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
-    
+
+    savePackagesToLocal();
     handleNumPackagesChange(); // إعادة الرسم بالعدد الجديد
+    saveSessionState();
     showToast("🗑️ تم حذف الرزمة");
 }
 
- 
-
-    function loadPackagesFromLocal() {
-        let savedNum = localStorage.getItem('numPackages');
-        let savedPkgsRaw = localStorage.getItem('savedPackages');
-        let savedPhysics = localStorage.getItem('excludePhysics');
-        
-        if (savedPhysics !== null) {
-            let el = document.getElementById('exclude-physics-practical');
-            if(el) el.checked = (savedPhysics === 'true');
-        }
-
-        if (savedNum) document.getElementById('num-packages').value = savedNum;
-        
-        // 1. نبني الكروت فارغة
-        generatePackageCards(); 
-        
-        // 2. نقوم بتعبئتها مباشرة إذا كان هناك بيانات
-        if (savedPkgsRaw) {
-            let savedPkgs = JSON.parse(savedPkgsRaw);
-            savedPkgs.forEach(pkg => {
-                let progEl = document.getElementById(`pkg-program-${pkg.id}`);
-                let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
-                let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
-                
-                if (progEl) progEl.value = pkg.prog || "";
-                if (capEl) capEl.value = pkg.cap || 20;
-                if (crnsHiddenEl) {
-                    crnsHiddenEl.value = pkg.crns || "";
-                    let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
-                    if(container) container.innerHTML = ''; // مسح القديم
-                    
+ function loadPackagesFromLocal() {
+    let savedNum = localStorage.getItem('numPackages');
+    let savedPkgsRaw = localStorage.getItem('savedPackages');
+    
+    if (savedNum) {
+        document.getElementById('num-packages').value = savedNum;
+    }
+    
+    // إعادة بناء الهيكل (الكروت الفارغة + زر الإضافة)
+    generatePackageCards(); 
+    
+    // تعبئة البيانات داخل الكروت
+    if (savedPkgsRaw) {
+        let savedPkgs = JSON.parse(savedPkgsRaw);
+        savedPkgs.forEach(pkg => {
+            let progEl = document.getElementById(`pkg-program-${pkg.id}`);
+            let capEl = document.getElementById(`pkg-capacity-${pkg.id}`);
+            let crnsHiddenEl = document.getElementById(`pkg-crns-${pkg.id}`);
+            
+            if (progEl) progEl.value = pkg.prog || "";
+            if (capEl) capEl.value = pkg.cap || 20;
+            if (crnsHiddenEl) {
+                crnsHiddenEl.value = pkg.crns || "";
+                let container = document.getElementById(`pkg-crns-tags-${pkg.id}`);
+                if(container) {
+                    container.innerHTML = ''; // مسح القديم
                     let crnsArray = (pkg.crns || "").split(/[\s,،]+/).filter(c => c.trim() !== "");
                     crnsArray.forEach(c => addCRNTag(c, pkg.id, true)); 
                 }
-            });
-        }
+            }
+        });
     }
-
+}
   
 
     // دالة حذف جميع الرزم دفعة واحدة
@@ -3411,6 +3419,7 @@ async function restoreSessionState() {
         let state = await getFromDB('activeSession');
         
         if (state) {
+            // 1. استعادة البيانات في المتغيرات البرمجية
             traineesData = state.traineesData || [];
             uniquePrograms = state.uniquePrograms || [];
             packagesData = state.packagesData || [];
@@ -3418,8 +3427,8 @@ async function restoreSessionState() {
             dynamicSC04Plan = state.dynamicSC04Plan || {}; 
             isSc04Attached = state.isSc04Attached || false;
             window.globalCourseRequirements = state.globalCourseRequirements || {}; 
-            programGSMapping = state.programGSMapping || {}; // استعادة التخصيص
-            window.globalGeneralStudiesOptions = state.globalGeneralStudiesOptions || []; // استعادة القائمة
+            programGSMapping = state.programGSMapping || {};
+            window.globalGeneralStudiesOptions = state.globalGeneralStudiesOptions || [];
 
             globalLinkedCRNs = {};
             if(state.globalLinkedCRNs) {
@@ -3427,18 +3436,42 @@ async function restoreSessionState() {
                     globalLinkedCRNs[k] = new Set(state.globalLinkedCRNs[k]);
                 }
             }
+
+            // 2. تحديث واجهة الصفحة الأولى (تنبيه المستخدم أن البيانات محملة)
+            if (traineesData.length > 0) {
+                document.getElementById('status-1').innerHTML = `
+                    <div style="color: #28a745; background: #e6ffed; padding: 10px; border-radius: 8px; border: 1px solid #b7eb8f; margin-bottom: 10px;">
+                        🔄 تم استعادة بيانات الجلسة السابقة بنجاح. <br>
+                        <small>(التقارير محملة في الذاكرة، يمكنك الانتقال مباشرة أو رفع ملفات جديدة لتحديثها)</small>
+                    </div>
+                `;
+            }
             
-            if (state.currentPage === 'page-2') {
+            // 3. معالجة الصفحة الثانية (إعادة بناء الكروت)
+            if (packagesData.length > 0) {
+                localStorage.setItem('numPackages', packagesData.length);
+                localStorage.setItem('savedPackages', JSON.stringify(packagesData.map(p => ({
+                    id: p.id,
+                    prog: p.program,
+                    cap: p.maxCapacity,
+                    crns: p.crns.join(' ')
+                }))));
+                
                 loadPackagesFromLocal(); 
+            }
+
+            // 4. الانتقال للصفحة التي كان عليها المستخدم وإعادة بناء جدولها
+            if (state.currentPage === 'page-2') {
                 switchPage('page-2');
             } else if (state.currentPage === 'page-3') {
                 setupPage3();
                 switchPage('page-3');
             }
-            showToast("🔄 تم استعادة البيانات");
+
+            showToast("🔄 تم استعادة الجلسة بنجاح");
         }
     } catch (e) {
-        console.warn("لا توجد جلسة سابقة.");
+        console.warn("لا توجد جلسة سابقة لاستعادتها.");
     }
 }
 

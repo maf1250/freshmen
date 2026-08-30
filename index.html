@@ -473,7 +473,7 @@
     </label>
 
     <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer; font-size: 14px;" title="محاولة إيجاد جداول تفرغ المتدربين يوماً في الأسبوع">
-        <input type="checkbox" id="compress-schedule" checked style="width: 16px; height: 16px; cursor: pointer;">
+        <input type="checkbox" id="compress-schedule" style="width: 16px; height: 16px; cursor: pointer;">
         محاولة ضغط الجدول في 4 أيام (إن أمكن)
     </label>
 
@@ -2776,7 +2776,28 @@ function parseTimeToMinutes(timeStr) {
         const PX_PER_MIN = 2.0;
         let baseStartTime = earliestStartTime === 9999 ? 480 : earliestStartTime;
 
-        let html = `<div class="schedule-grid-container">`;
+        // --- إضافة دليل الجدول  ---
+let legendHTML = `
+    <div style="display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; padding: 6px 12px; background: var(--bg-surface); border: 1px dashed var(--border); border-radius: 6px; font-size: 11px; font-weight: bold; color: var(--text-secondary);">
+        <span style="display: flex; align-items: center; gap: 4px;">📘 نظري</span>
+        <span style="display: flex; align-items: center; gap: 4px;">🛠️ عملي</span>
+        <span style="display: flex; align-items: center; gap: 4px;">💻 عن بعد</span>
+        <span style="display: flex; align-items: center; gap: 4px;">🧑‍💻 ذاتي</span>
+        <span style="display: flex; align-items: center; gap: 4px;">🧩 مدمج</span>
+        
+        <span style="border-right: 1px solid var(--border); margin: 0 4px; height: 15px; align-self: center;"></span>
+        
+       <span style="display: flex; align-items: center; gap: 4px; cursor: help;" title="التعارض يعني تداخل الأوقات بين محاضرتين في نفس الوقت">
+            <span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px;">🚫</span> تعارض
+        </span>
+        
+        <span style="display: flex; align-items: center; gap: 4px; cursor: help;" title="التقاطع يعني وجود مقرر ينتهي وقته بنفس وقت ابتداء المحاضرة التالية وهذا يسبب تعارض في نظام رايات">
+            <span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px;">⚠️</span> تقاطع
+        </span>
+    </div>
+`;
+
+let html = legendHTML + `<div class="schedule-grid-container">`;
         
         for (let day in daysMap) {
             let classesToday = daysMap[day];
@@ -2801,9 +2822,18 @@ function parseTimeToMinutes(timeStr) {
                     let cardPixels = durationMinutes * PX_PER_MIN;
                     currentCursor = course.end;
 
-                      let borderColor = "#8dc63f"; let bgColor = "var(--bg-elevated)"; let titleColor = "#8dc63f"; let typeEmoji = "🛠️";
-                    if (course.type.includes('نظري') || course.type.includes('محاضرة') || course.type.includes('عن بعد') || course.type.includes('مدمج')) { borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "📘"; }
-                    
+let borderColor = "#8dc63f"; let bgColor = "var(--bg-elevated)"; let titleColor = "#8dc63f"; let typeEmoji = "🛠️";
+let cType = String(course.type).toLowerCase();
+
+if (cType.includes('عن بعد')) { 
+    borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "💻"; 
+} else if (cType.includes('ذاتي')) { 
+    borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "🧑‍💻"; 
+} else if (cType.includes('مدمج')) { 
+    borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "🧩"; 
+} else if (cType.includes('نظري') || cType.includes('محاضرة')) { 
+    borderColor = "var(--primary)"; titleColor = "var(--primary)"; typeEmoji = "📘"; 
+}                    
                     let warningBadge = '';
                     if (course.isConflicting) { borderColor = "#dc3545"; titleColor = "#dc3545"; warningBadge = '<span style="background:#dc3545; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">🚫</span>'; } 
                     else if (course.isIntersecting) { borderColor = "#f39c12"; titleColor = "#f39c12"; warningBadge = '<span style="background:#f39c12; color:#fff; padding:1px 4px; border-radius:3px; font-size:9px; margin-left:4px;">⚠️</span>'; }

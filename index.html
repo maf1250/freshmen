@@ -478,6 +478,13 @@
     </label>
     <span style="font-size: 11px; color: var(--text-muted);">(سيتم سؤالك عن الأرقام عند التوليد الآلي)</span>
 </div>
+        <!-- خيار ضغط الجدول في 4 أيام -->
+<div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
+    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer;">
+        <input type="checkbox" id="compress-schedule" style="width: 18px; height: 18px; cursor: pointer;">
+        محاولة ضغط الجدول في 4 أيام (إن أمكن) لتقليل أيام حضور المتدرب
+    </label>
+</div>
  <!-- خيار استثناء الفيزياء -->
         <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">
@@ -1408,11 +1415,52 @@ function startAutoGenerate() {
     autoGeneratePackages(cap); 
 }
 
+    // دالة لتقييم الجدول من ناحية الفراغات وعدد أيام الحضور
+function evaluateBundleSchedule(crnsArray) {
+    let daySchedules = { 'الأحد':[], 'الإثنين':[], 'الثلاثاء':[], 'الأربعاء':[], 'الخميس':[] };
+    
+    crnsArray.forEach(crn => {
+        let details = globalCRNDetails[crn.trim()];
+        if (details) {
+            details.parts.forEach(part => {
+                let timeData = parseTimeToMinutes(part.time);
+                if (timeData) {
+                    let dayStr = String(part.days).replace(/\s/g, '');
+                    if (dayStr.includes('الأحد') || dayStr.includes('الاحد')) daySchedules['الأحد'].push(timeData);
+                    if (dayStr.includes('الإثنين') || dayStr.includes('الاثنين')) daySchedules['الإثنين'].push(timeData);
+                    if (dayStr.includes('الثلاثاء')) daySchedules['الثلاثاء'].push(timeData);
+                    if (dayStr.includes('الأربعاء') || dayStr.includes('الاربعاء')) daySchedules['الأربعاء'].push(timeData);
+                    if (dayStr.includes('الخميس')) daySchedules['الخميس'].push(timeData);
+                }
+            });
+        }
+    });
+
+    let totalGaps = 0;
+    let daysUsed = 0;
+
+    for (let day in daySchedules) {
+        let classes = daySchedules[day];
+        if (classes.length > 0) {
+            daysUsed++;
+            // ترتيب المحاضرات زمنيا في هذا اليوم
+            classes.sort((a, b) => a.start - b.start);
+            // حساب الفراغات بين المحاضرات
+            for (let i = 0; i < classes.length - 1; i++) {
+                let gap = classes[i+1].start - classes[i].end;
+                if (gap > 0) totalGaps += gap;
+            }
+        }
+    }
+    return { totalGaps, daysUsed };
+}
+
 function autoGeneratePackages(defaultCap) {
     let generatedPackages = [];
     let aiLog = []; 
     let excludePhysics = document.getElementById('exclude-physics-practical').checked;
     let isGSEnabled = document.getElementById('enable-general-studies').checked;
+    let prefer4Days = document.getElementById('compress-schedule') ? document.getElementById('compress-schedule').checked : false;
 
     let tempRemaining = {};
     for (let crn in globalCRNDetails) {
@@ -1423,15 +1471,12 @@ function autoGeneratePackages(defaultCap) {
         let studentsCount = traineesData.filter(t => t.program === prog).length;
         if (studentsCount === 0) return;
 
-        // --- محرك بحث ذكي عن الخطة ---
         let planData = null;
         let matchedPlanKey = null;
 
-        // 1. محاولة المطابقة المباشرة
         if (dynamicSC04Plan[prog]) {
             planData = dynamicSC04Plan[prog];
         } else {
-            // 2. البحث باستخدام المطابقة الذكية (Fuzzy Matching) في أسماء الخطط المتوفرة
             let planKeys = Object.keys(dynamicSC04Plan);
             matchedPlanKey = planKeys.find(key => isProgramMatch(prog, key));
             if (matchedPlanKey) {
@@ -1459,8 +1504,6 @@ function autoGeneratePackages(defaultCap) {
 
             planCourses.forEach(planCourse => {
                 let normPlan = globalNormalizeCode(planCourse);
-                
-                // فحص الخيارات المحددة يدوياً لهذا المقرر
                 let specificOptions = gsOptionsPool.filter(gsCrn => {
                     let details = globalCRNDetails[gsCrn];
                     if (!details) return false;
@@ -1475,7 +1518,7 @@ function autoGeneratePackages(defaultCap) {
                     specificOptions.forEach(crn => {
                         let det = globalCRNDetails[crn];
                         let type = String(det.type).toLowerCase();
-                        if (type.includes('نظري') || type.includes('محاضرة') || type.includes('عن بعد')) pool.theory.push(crn);
+                        if (type.includes('نظري') || type.includes('محاضرة') || type.includes('عن بعد') || type.includes('مدمج')) pool.theory.push(crn);
                         else pool.practical.push(crn);
                     });
                 } else {
@@ -1484,7 +1527,7 @@ function autoGeneratePackages(defaultCap) {
                         let normSS01Course = globalNormalizeCode(details.course + details.name);
                         if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
                             let typeStr = String(details.type).toLowerCase();
-                            if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد')) pool.theory.push(crn);
+                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) pool.theory.push(crn);
                             else pool.practical.push(crn);
                         }
                     }
@@ -1515,20 +1558,46 @@ function autoGeneratePackages(defaultCap) {
                 break; 
             }
 
-            let finalBundle = null;
+            // === خوارزمية الذكاء الاصطناعي لاختيار أفضل جدول ===
+            let validBundles = [];
             const solve = (idx, current) => {
-                if (idx === requiredPicks.length) return current;
+                // تقييد البحث بـ 100 توليفة لمنع تشنج المتصفح
+                if (validBundles.length >= 100) return; 
+                
+                if (idx === requiredPicks.length) {
+                    validBundles.push([...current]);
+                    return;
+                }
                 for (let crn of requiredPicks[idx].options) {
                     let next = [...current, crn];
                     if (getLinkageErrors(next).length === 0 && !checkScheduleConflicts(next).hasOverlap) {
-                        let res = solve(idx + 1, next);
-                        if (res) return res;
+                        solve(idx + 1, next);
                     }
                 }
-                return null;
             };
 
-            finalBundle = solve(0, []); 
+            solve(0, []); 
+            let finalBundle = null;
+
+            if (validBundles.length > 0) {
+                let bestScore = Infinity;
+                for (let bundle of validBundles) {
+                    let stats = evaluateBundleSchedule(bundle);
+                    
+                    // تقييم أساسي: الفراغات بالدقائق (يتم تصغيرها دائماً)
+                    let score = stats.totalGaps;
+                    
+                    // إذا كان خيار 4 أيام مفعلاً والجدول يستخدم 5 أيام، تتم معاقبته برقم كبير
+                    if (prefer4Days && stats.daysUsed > 4) {
+                        score += 10000; 
+                    }
+                    
+                    if (score < bestScore) {
+                        bestScore = score;
+                        finalBundle = bundle;
+                    }
+                }
+            }
 
             if (finalBundle) {
                 generatedPackages.push({ prog: prog, cap: defaultCap, crns: finalBundle.join(' ') });

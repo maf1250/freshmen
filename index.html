@@ -853,7 +853,7 @@ async function goToPage2() {
                             let normCourse = globalNormalizeCode(cleanCourse); 
                             
                             if (!dynamicSC04Plan[cleanProg]) {
-                                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0 };
+                                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0, courseDetails: {} }; 
                             }
                             
                             if (!dynamicSC04Plan[cleanProg].courses.includes(cleanCourse)) {
@@ -1522,29 +1522,42 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
     let normPlanCourse = globalNormalizeCode(planCourse);
     let plan = null;
     
-    // 1. جلب بيانات الساعات من SC04 (مح، عم)
-    if (dynamicSC04Plan[prog]) {
-        plan = dynamicSC04Plan[prog].courseDetails[normPlanCourse];
-    } else {
+    // 1. الوصول الآمن لبيانات الخطة (تجنب خطأ undefined)
+    let programPlan = dynamicSC04Plan[prog];
+    if (!programPlan) {
+        // محاولة البحث عن تخصص مطابق إذا لم يجد الاسم المباشر
         let matchedKey = Object.keys(dynamicSC04Plan).find(k => isProgramMatch(prog, k));
-        if (matchedKey) plan = dynamicSC04Plan[matchedKey].courseDetails[normPlanCourse];
+        if (matchedKey) {
+            programPlan = dynamicSC04Plan[matchedKey];
+        }
     }
 
-    if (!plan) return;
+    // فحص: هل التخصص موجود وهل يحتوي على كائن تفاصيل الساعات؟
+    if (programPlan && programPlan.courseDetails && programPlan.courseDetails[normPlanCourse]) {
+        plan = programPlan.courseDetails[normPlanCourse];
+    }
+
+    // إذا لم نجد بيانات الساعات في الخطة لهذا المقرر، نخرج من الدالة لمنع توقف النظام
+    if (!plan) {
+        console.warn(`تنبيه: لم يتم العثور على تفاصيل الساعات للمقرر ${planCourse} في تخصص ${prog}`);
+        return;
+    }
 
     crnsForThisCourse.forEach(crn => {
         let d = globalCRNDetails[crn];
-        let typeStr = String(d.type).toLowerCase();
+        if (!d) return; // حماية في حال الرقم المرجعي غير موجود في SS01
+
+        let typeStr = String(d.type || "").toLowerCase();
         let isTheory = false;
         let isPractical = false;
 
-        // أ- الفحص الصريح من واقع الجدول (SS01)
+        // أ- الفحص الصريح من واقع الجدول (SS01) بناءً على نوع الشعبة المكتوب
         if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
             isTheory = true;
         } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
             isPractical = true;
         } 
-        // ب- معالجة الشعب الغامضة (مدمج/ذاتي) باستخدام الارتباط (SF33)
+        // ب- معالجة الشعب الغامضة (مدمج/ذاتي/عن بعد) باستخدام الارتباط (SF33)
         else {
             let linkedCRNs = globalLinkedCRNs[crn]; 
             let foundByLink = false;
@@ -1553,8 +1566,8 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
                 for (let linkedCrn of linkedCRNs) {
                     let linkedDetail = globalCRNDetails[linkedCrn];
                     if (linkedDetail) {
-                        let linkedType = String(linkedDetail.type).toLowerCase();
-                        // إذا كان المرتبط صريحاً، فالشعبة الحالية هي المكملة
+                        let linkedType = String(linkedDetail.type || "").toLowerCase();
+                        // ذكاء الارتباط: إذا كان المرتبط صريحاً، فالشعبة الحالية هي المكملة له
                         if (linkedType.includes('عملي') || linkedType.includes('تدريب')) {
                             isTheory = true; foundByLink = true; break;
                         } else if (linkedType.includes('نظري') || linkedType.includes('محاضرة')) {
@@ -1564,27 +1577,33 @@ const processAndCategorize = (crnsForThisCourse, planCourse) => {
                 }
             }
 
-            // ج- إذا فشل الارتباط، نلجأ لمقارنة الساعات (SC04)
+            // ج- إذا لم نجد ارتباطاً في SF33، نلجأ لمقارنة الساعات المعتمدة من الخطة (SC04)
             if (!foundByLink) {
-                let ss01Hours = parseFloat(d.hours);
+                let ss01Hours = parseFloat(d.hours || 0);
+                
                 if (plan.theory > 0 && plan.practical === 0) {
-                    isTheory = true;
+                    isTheory = true; // المقرر نظري فقط في الخطة
                 } else if (plan.practical > 0 && plan.theory === 0) {
-                    isPractical = true;
+                    isPractical = true; // المقرر عملي فقط في الخطة
                 } else if (ss01Hours === plan.theory && ss01Hours !== plan.practical) {
-                    isTheory = true;
+                    isTheory = true; // الساعات تطابق الشق النظري
                 } else if (ss01Hours === plan.practical && ss01Hours !== plan.theory) {
-                    isPractical = true;
+                    isPractical = true; // الساعات تطابق الشق العملي
                 } else {
-                    // د- حالة الغموض القصوى (مثلاً ساعات متساوية) نفحص الاسم
-                    let nameStr = String(d.name).toLowerCase();
+                    // د- حالة الغموض القصوى (ساعات متساوية أو غير مطابقة) نفحص اسم المقرر
+                    let nameStr = String(d.name || "").toLowerCase();
                     if (nameStr.includes('عملي')) isPractical = true;
                     else if (nameStr.includes('نظري')) isTheory = true;
-                    else { isTheory = true; isPractical = true; } // جرب الاثنين
+                    else {
+                        // كحل أخير: نعتبرها صالحة للاثنين ليقوم المحرك بتجربة التوافق الزمني
+                        isTheory = true; 
+                        isPractical = true; 
+                    }
                 }
             }
         }
 
+        // إضافة الشعبة للمجمع (Pool) بناءً على التصنيف النهائي
         if (isTheory) pool.theory.push(crn);
         if (isPractical) pool.practical.push(crn);
     });

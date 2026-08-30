@@ -811,64 +811,74 @@ async function goToPage2() {
                 };
 
                 for (let i = 0; i < sc04Input.files.length; i++) {
-                    let file = sc04Input.files[i];
-                    let rawSC04 = await readExcelFile(file);
+    let file = sc04Input.files[i];
+    let rawSC04 = await readExcelFile(file);
 
-                    rawSC04.forEach(row => {
-                        let prog = row[colProgSc04] || row['التخصص'];
-                        let course = row[colCourseSc04] || row['المقرر'];
-                        
-                        // جلب القيم من الأعمدة التي قد تحمل اسم "الفصل التدريبي"
-                        let val1 = String(row['الفصل التدريبي'] || '').trim();
-                        let val2 = String(row['الفصل التدريبي_1'] || '').trim();
-                        
-                        let isLevel1 = false;
+    rawSC04.forEach(row => {
+        let prog = row[colProgSc04] || row['التخصص'];
+        let course = row[colCourseSc04] || row['المقرر'];
 
-                        // دالة التحقق الذكية:
-                        const checkStrictLevel1 = (v) => {
-                            if (!v) return false;
-                            
-                            // 1. استبعاد أي نص يحتوي على سنة دراسية (مثل 1446 أو 1447) باستخدام التعبير النمطي
-                            // يبحث عن رقمين يبدآن بـ 14 متبوعين برقمين آخرين
-                            if (/(14|١٤)[0-9٠-٩]{2}/.test(v)) return false;
+        // --- 1. البحث الذكي عن أعمدة الساعات (الحل الجديد) ---
+        let allKeys = Object.keys(row);
+        let theoryKey = allKeys.find(k => k.trim() === 'مح' || k.trim() === 'نظري' || k.trim() === 'محاضرة');
+        let practicalKey = allKeys.find(k => k.trim() === 'عم' || k.trim() === 'عملي' || k.trim() === 'تدريب');
 
-                            // 2. توحيد النص للفحص (إزالة المسافات وتوحيد الحروف)
-                            let n = v.replace(/[أإآ]/g, 'ا').replace(/\s/g, '');
+        let theoryHrs = theoryKey ? parseNumber(row[theoryKey]) : 0;
+        let practicalHrs = practicalKey ? parseNumber(row[practicalKey]) : 0;
+        // --------------------------------------------------
 
-                            // 3. التأكد أن النص يحتوي على "اول" أو "1" فقط
-                            if (n === '1' || n === '١' || n.includes('اول')) {
-                                return true;
-                            }
-                            return false;
-                        };
+        // جلب القيم من الأعمدة التي قد تحمل اسم "الفصل التدريبي"
+        let val1 = String(row['الفصل التدريبي'] || '').trim();
+        let val2 = String(row['الفصل التدريبي_1'] || '').trim();
+        
+        let isLevel1 = false;
 
-                        // إذا كان أي من العمودين المكررين هو "المستوى الأول" الحقيقي
-                        if (checkStrictLevel1(val1) || checkStrictLevel1(val2)) {
-                            isLevel1 = true;
-                        }
+        // دالة التحقق الذكية:
+        const checkStrictLevel1 = (v) => {
+            if (!v) return false;
+            // استبعاد أي نص يحتوي على سنة دراسية (مثل 1446 أو 1447)
+            if (/(14|١٤)[0-9٠-٩]{2}/.test(v)) return false;
+            // توحيد النص للفحص
+            let n = v.replace(/[أإآ]/g, 'ا').replace(/\s/g, '');
+            // التأكد أن النص يحتوي على "اول" أو "1" فقط
+            if (n === '1' || n === '١' || n.includes('اول')) {
+                return true;
+            }
+            return false;
+        };
 
-                        if (prog && course && isLevel1) {
-                            let cleanProg = prog.trim();
-                            let cleanCourse = course.trim();
-                            let normCourse = globalNormalizeCode(cleanCourse); 
-                            
-                            if (!dynamicSC04Plan[cleanProg]) {
-                                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0, courseDetails: {} }; 
-                            }
-                            
-                            if (!dynamicSC04Plan[cleanProg].courses.includes(cleanCourse)) {
-                                dynamicSC04Plan[cleanProg].courses.push(cleanCourse);
-                                
-                                let theory = parseNumber(row['مح'] || row['نظري'] || 0);
-                                let practical = parseNumber(row['عم'] || row['عملي'] || 0);
-                                let parts = (theory > 0 && practical > 0) ? 2 : 1;
-                                
-                                dynamicSC04Plan[cleanProg].requiredParts += parts;
-                                window.globalCourseRequirements[normCourse] = parts;
-                            }
-                        }
-                    });
-                }
+        // التحقق من المستوى الأول
+        if (checkStrictLevel1(val1) || checkStrictLevel1(val2)) {
+            isLevel1 = true;
+        }
+
+        if (prog && course && isLevel1) {
+            let cleanProg = prog.trim();
+            let cleanCourse = course.trim();
+            let normCourse = globalNormalizeCode(cleanCourse); 
+            
+            if (!dynamicSC04Plan[cleanProg]) {
+                dynamicSC04Plan[cleanProg] = { courses: [], requiredParts: 0, courseDetails: {} }; 
+            }
+            
+            if (!dynamicSC04Plan[cleanProg].courses.includes(cleanCourse)) {
+                dynamicSC04Plan[cleanProg].courses.push(cleanCourse);
+                
+                // حفظ تفاصيل الساعات التي تم العثور عليها بالبحث الذكي
+                dynamicSC04Plan[cleanProg].courseDetails[normCourse] = {
+                    theory: theoryHrs,
+                    practical: practicalHrs
+                };
+
+                // حساب عدد الشعب المطلوبة بناءً على الساعات
+                let parts = (theoryHrs > 0 && practicalHrs > 0) ? 2 : 1;
+                
+                dynamicSC04Plan[cleanProg].requiredParts += parts;
+                window.globalCourseRequirements[normCourse] = parts;
+            }
+        }
+    });
+}
             }
             
             let rawSP15 = await readExcelFile(sp15File);

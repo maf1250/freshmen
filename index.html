@@ -1514,24 +1514,45 @@ function autoGeneratePackages(defaultCap) {
 
                 let pool = { theory: [], practical: [] };
 
-                if (specificOptions.length > 0) {
-                    specificOptions.forEach(crn => {
-                        let det = globalCRNDetails[crn];
-                        let type = String(det.type).toLowerCase();
-                        if (type.includes('نظري') || type.includes('محاضرة') || type.includes('عن بعد') || type.includes('مدمج')) pool.theory.push(crn);
-                        else pool.practical.push(crn);
-                    });
-                } else {
-                    for (let crn in globalCRNDetails) {
-                        let details = globalCRNDetails[crn];
-                        let normSS01Course = globalNormalizeCode(details.course + details.name);
-                        if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
-                            let typeStr = String(details.type).toLowerCase();
-                        if (typeStr.includes('نظري') || typeStr.includes('محاضرة') || typeStr.includes('عن بعد') || typeStr.includes('مدمج')) pool.theory.push(crn);
-                            else pool.practical.push(crn);
-                        }
-                    }
-                }
+               // --- دالة مساعدة لتصنيف الشعبة بذكاء ---
+const categorizeCRN = (crn, details) => {
+    let typeStr = String(details.type).toLowerCase();
+    let nameStr = String(details.name).toLowerCase();
+    
+    // 1. الفحص المباشر في نوع الجدولة
+    let isTheory = typeStr.includes('نظري') || typeStr.includes('محاضرة');
+    let isPractical = typeStr.includes('عملي') || typeStr.includes('تدريب');
+    
+    if (typeStr.includes('مدمج') || typeStr.includes('عن بعد') || typeStr.includes('ذاتي')) {
+        if (!isTheory && !isPractical) {
+            if (nameStr.includes('عملي')) isPractical = true;
+            else if (nameStr.includes('نظري')) isTheory = true;
+            else {
+                isTheory = true;
+                isPractical = true;
+            }
+        }
+    }
+    
+    if (!isTheory && !isPractical) isPractical = true;
+    
+    if (isTheory && !pool.theory.includes(crn)) pool.theory.push(crn);
+    if (isPractical && !pool.practical.includes(crn)) pool.practical.push(crn);
+};
+
+if (specificOptions.length > 0) {
+    specificOptions.forEach(crn => {
+        categorizeCRN(crn, globalCRNDetails[crn]);
+    });
+} else {
+    for (let crn in globalCRNDetails) {
+        let details = globalCRNDetails[crn];
+        let normSS01Course = globalNormalizeCode(details.course + details.name);
+        if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
+            categorizeCRN(crn, details);
+        }
+    }
+}
 
                 let reqParts = window.globalCourseRequirements[normPlan] || 1;
                 if (normPlan.includes('فيزي') || normPlan.includes('فيزياء')) reqParts = excludePhysics ? 1 : 2;
@@ -1547,7 +1568,7 @@ function autoGeneratePackages(defaultCap) {
                         requiredPicks.push({ name: planCourse + " (عملي)", options: pOpts });
                     }
                 } else {
-                    let allOpts = getValidOptions([...pool.theory, ...pool.practical]);
+                    let allOpts = getValidOptions([...new Set([...pool.theory, ...pool.practical])]);
                     if (allOpts.length === 0) missingForThisBundle.push(planCourse);
                     else requiredPicks.push({ name: planCourse, options: allOpts });
                 }

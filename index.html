@@ -464,12 +464,20 @@
             <span>🟠 مقرر في مستوى أعلى</span>
             <span>🔴 غير موجود بجدول الوحدة</span>
         </div>
-         <div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
-            <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer;">
-                <input type="checkbox" id="even-distribution" checked style="width: 18px; height: 18px; cursor: pointer;">
-                تفعيل التوزيع العادل
-            </label>
-        </div>
+         <!-- خيارات الإسناد المتقدمة (مدمجة لتوفير المساحة) -->
+<div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; display: flex; flex-wrap: wrap; gap: 25px; align-items: center;">
+    
+    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer; font-size: 14px;">
+        <input type="checkbox" id="even-distribution" checked style="width: 16px; height: 16px; cursor: pointer;">
+        تفعيل التوزيع العادل
+    </label>
+
+    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer; font-size: 14px;" title="محاولة إيجاد جداول تفرغ المتدربين يوماً في الأسبوع">
+        <input type="checkbox" id="compress-schedule" checked style="width: 16px; height: 16px; cursor: pointer;">
+        محاولة ضغط الجدول في 4 أيام (إن أمكن)
+    </label>
+
+</div>
         <!-- خيار تخصيص الدراسات العامة -->
 <div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px; display: flex; align-items: center; justify-content: space-between;">
     <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer;">
@@ -478,13 +486,7 @@
     </label>
     <span style="font-size: 11px; color: var(--text-muted);">(سيتم سؤالك عن الأرقام عند التوليد الآلي)</span>
 </div>
-        <!-- خيار ضغط الجدول في 4 أيام -->
-<div style="background: var(--bg-elevated); border: 1px solid var(--border-strong); padding: 10px 15px; border-radius: 8px; margin-bottom: 15px;">
-    <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: var(--primary); cursor: pointer;">
-        <input type="checkbox" id="compress-schedule" style="width: 18px; height: 18px; cursor: pointer;">
-        محاولة ضغط الجدول في 4 أيام (إن أمكن) لتقليل أيام حضور المتدرب
-    </label>
-</div>
+       
  <!-- خيار استثناء الفيزياء -->
         <div style="background: #fff3cd; border: 1px solid #ffeeba; padding: 10px 15px; border-radius: 8px; margin-bottom: 20px;">
             <label style="display: flex; align-items: center; gap: 8px; font-weight: bold; color: #856404; cursor: pointer;">

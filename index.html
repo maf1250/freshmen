@@ -1513,9 +1513,11 @@ function autoGeneratePackages(defaultCap) {
                 let pool = { theory: [], practical: [] };
 
                 // --- وظيفة التصنيف الذكي داخل التوليد الآلي ---
-                const processAndCategorize = (crnsForThisCourse, planCourse) => {
+const processAndCategorize = (crnsForThisCourse, planCourse) => {
     let normPlanCourse = globalNormalizeCode(planCourse);
     let plan = null;
+    
+    // جلب بيانات الخطة (SC04)
     if (dynamicSC04Plan[prog]) {
         plan = dynamicSC04Plan[prog].courseDetails[normPlanCourse];
     } else {
@@ -1525,66 +1527,68 @@ function autoGeneratePackages(defaultCap) {
 
     if (!plan) return;
 
-    // مصفوفات تصنيف مؤقتة
-    let explicitTheory = [];
-    let explicitPractical = [];
-    let ambiguous = [];
-
     crnsForThisCourse.forEach(crn => {
         let d = globalCRNDetails[crn];
         let typeStr = String(d.type).toLowerCase();
         
-        // 1. فرز الشعب بناءً على التصنيف الصريح أولاً
+        let isTheory = false;
+        let isPractical = false;
+
+        // 1. الفحص الصريح (نظري/عملي)
         if (typeStr.includes('نظري') || typeStr.includes('محاضرة')) {
-            explicitTheory.push(crn);
+            isTheory = true;
         } else if (typeStr.includes('عملي') || typeStr.includes('تدريب')) {
-            explicitPractical.push(crn);
-        } else {
-            // أي نوع آخر (مدمج، عن بعد، ذاتي) يعتبر غامضاً حالياً
-            ambiguous.push(crn);
-        }
-    });
-
-    // 2. توزيع الشعب الصريحة في المجمع الرئيسي (Pool)
-    explicitTheory.forEach(c => pool.theory.push(c));
-    explicitPractical.forEach(c => pool.practical.push(c));
-
-    // 3. معالجة الشعب الغامضة (الاستبعاد الذكي)
-    ambiguous.forEach(crn => {
-        let d = globalCRNDetails[crn];
-        let ss01Hours = parseFloat(d.hours);
-        let nameStr = String(d.name).toLowerCase();
-
-        if (plan.theory > 0 && plan.practical === 0) {
-            pool.theory.push(crn);
-        } else if (plan.practical > 0 && plan.theory === 0) {
-            pool.practical.push(crn);
+            isPractical = true;
         } 
-        else if (plan.theory > 0 && plan.practical > 0) {
-            
-      
-            if (explicitPractical.length > 0 && explicitTheory.length === 0) {
-                pool.theory.push(crn);
-            } else if (explicitTheory.length > 0 && explicitPractical.length === 0) {
-                pool.practical.push(crn);
-            } 
-         
-                
-            else {
-                if (nameStr.includes('عملي')) {
-                    pool.practical.push(crn);
-                } else if (nameStr.includes('نظري')) {
-                    pool.theory.push(crn);
-                } else if (ss01Hours === plan.theory) {
-                    pool.theory.push(crn);
-                } else if (ss01Hours === plan.practical) {
-                    pool.practical.push(crn);
+        
+        // 2. إذا كان النوع (مدمج/ذاتي/غامض) -> نستخدم ملف SF33 للربط
+        else {
+            // نبحث عن أي شعبة مرتبطة في ملف SF33
+            let linkedCRNs = globalLinkedCRNs[crn]; 
+            let foundByLink = false;
+
+            if (linkedCRNs && linkedCRNs.size > 0) {
+                for (let linkedCrn of linkedCRNs) {
+                    let linkedDetail = globalCRNDetails[linkedCrn];
+                    if (linkedDetail) {
+                        let linkedType = String(linkedDetail.type).toLowerCase();
+                        
+                        // "ذكاء الارتباط": إذا كان المرتبط نظري، فأنا عملي.. والعكس
+                        if (linkedType.includes('عملي') || linkedType.includes('تدريب')) {
+                            isTheory = true;
+                            foundByLink = true;
+                            break;
+                        } else if (linkedType.includes('نظري') || linkedType.includes('محاضرة')) {
+                            isPractical = true;
+                            foundByLink = true;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // 3. إذا لم نجد ارتباطاً في SF33، نستخدم منطق "الاستبعاد" من الخطة
+            if (!foundByLink) {
+                if (plan.theory > 0 && plan.practical === 0) {
+                    isTheory = true;
+                } else if (plan.practical > 0 && plan.theory === 0) {
+                    isPractical = true;
                 } else {
-                    pool.theory.push(crn);
-                    pool.practical.push(crn);
+                    let nameStr = String(d.name).toLowerCase();
+                    if (nameStr.includes('عملي')) isPractical = true;
+                    else if (nameStr.includes('نظري')) isTheory = true;
+                    else if (parseFloat(d.hours) === plan.theory) isTheory = true;
+                    else if (parseFloat(d.hours) === plan.practical) isPractical = true;
+                    else {
+                        // حالة الغموض القصوى
+                        isTheory = true; isPractical = true;
+                    }
                 }
             }
         }
+
+        if (isTheory) pool.theory.push(crn);
+        if (isPractical) pool.practical.push(crn);
     });
 };
 

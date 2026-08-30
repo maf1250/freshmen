@@ -1472,30 +1472,26 @@ function autoGeneratePackages(defaultCap) {
     let isGSEnabled = document.getElementById('enable-general-studies').checked;
     let prefer4Days = document.getElementById('compress-schedule') ? document.getElementById('compress-schedule').checked : false;
 
+    // 1. نسخة مؤقتة من المقاعد المتبقية للمحاكاة
     let tempRemaining = {};
     for (let crn in globalCRNDetails) {
         tempRemaining[crn] = globalCRNDetails[crn].initialRemaining;
     }
 
-    uniquePrograms.forEach(prog => {
+    // 2. ترتيب التخصصات بناءً على العدد (الأكبر أولاً لضمان المقاعد النادرة)
+    let sortedPrograms = [...uniquePrograms].sort((a, b) => {
+        let countA = traineesData.filter(t => t.program === a).length;
+        let countB = traineesData.filter(t => t.program === b).length;
+        return countB - countA;
+    });
+
+    sortedPrograms.forEach(prog => {
         let studentsCount = traineesData.filter(t => t.program === prog).length;
         if (studentsCount === 0) return;
 
-        let planData = null;
-        let matchedPlanKey = null;
-
-        if (dynamicSC04Plan[prog]) {
-            planData = dynamicSC04Plan[prog];
-        } else {
-            let planKeys = Object.keys(dynamicSC04Plan);
-            matchedPlanKey = planKeys.find(key => isProgramMatch(prog, key));
-            if (matchedPlanKey) {
-                planData = dynamicSC04Plan[matchedPlanKey];
-            }
-        }
-
+        let planData = getPlanForProgram(prog);
         if (!planData) {
-            aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة المستوى الأول في ملف SC04. تأكد من مسمى التخصص.</div>`);
+            aiLog.push(`<div style="color:#dc3545; background:#f8d7da; padding:5px; border-radius:4px; margin-bottom:5px;"><strong>❌ ${prog}:</strong> لم يتم العثور على خطة.</div>`);
             return; 
         }
 
@@ -1514,138 +1510,129 @@ function autoGeneratePackages(defaultCap) {
 
             planCourses.forEach(planCourse => {
                 let normPlan = globalNormalizeCode(planCourse);
-                let specificOptions = gsOptionsPool.filter(gsCrn => {
-                    let details = globalCRNDetails[gsCrn];
-                    if (!details) return false;
-                    let gsCode = globalNormalizeCode(details.course);
-                    let gsName = globalNormalizeCode(details.name);
-                    return gsCode.includes(normPlan) || normPlan.includes(gsCode) || gsName.includes(normPlan);
-                });
-
                 let pool = { theory: [], practical: [] };
 
-               // --- دالة مساعدة لتصنيف الشعبة بذكاء ---
-const categorizeCRN = (crn, details) => {
-    let typeStr = String(details.type).toLowerCase();
-    let nameStr = String(details.name).toLowerCase();
-    
-    // 1. الفحص المباشر في نوع الجدولة
-    let isTheory = typeStr.includes('نظري') || typeStr.includes('محاضرة');
-    let isPractical = typeStr.includes('عملي') || typeStr.includes('تدريب');
-    
-    if (typeStr.includes('مدمج') || typeStr.includes('عن بعد') || typeStr.includes('ذاتي')) {
-        if (!isTheory && !isPractical) {
-            if (nameStr.includes('عملي')) isPractical = true;
-            else if (nameStr.includes('نظري')) isTheory = true;
-            else {
-                isTheory = true;
-                isPractical = true;
-            }
-        }
-    }
-    
-    if (!isTheory && !isPractical) isPractical = true;
-    
-    if (isTheory && !pool.theory.includes(crn)) pool.theory.push(crn);
-    if (isPractical && !pool.practical.includes(crn)) pool.practical.push(crn);
-};
+                // --- وظيفة التصنيف الذكي داخل التوليد الآلي ---
+                const processAndCategorize = (crn) => {
+                    let d = globalCRNDetails[crn];
+                    let typeStr = String(d.type).toLowerCase();
+                    let nameStr = String(d.name).toLowerCase();
+                    
+                    let isTheory = typeStr.includes('نظري') || typeStr.includes('محاضرة');
+                    let isPractical = typeStr.includes('عملي') || typeStr.includes('تدريب');
 
-if (specificOptions.length > 0) {
-    specificOptions.forEach(crn => {
-        categorizeCRN(crn, globalCRNDetails[crn]);
-    });
-} else {
-    for (let crn in globalCRNDetails) {
-        let details = globalCRNDetails[crn];
-        let normSS01Course = globalNormalizeCode(details.course + details.name);
-        if (normSS01Course.includes(normPlan) || normPlan.includes(globalNormalizeCode(details.course))) {
-            categorizeCRN(crn, details);
-        }
-    }
-}
+                    // فحص الأنماط الخاصة (مدمج، ذاتي، عن بعد)
+                    if (typeStr.includes('مدمج') || typeStr.includes('عن بعد') || typeStr.includes('ذاتي')) {
+                        if (!isTheory && !isPractical) {
+                            if (nameStr.includes('عملي')) isPractical = true;
+                            else if (nameStr.includes('نظري')) isTheory = true;
+                            else { isTheory = true; isPractical = true; } // إذا لم يحدد، نعتبرها صالحة للاثنين
+                        }
+                    }
+
+                    // إذا لم يتم التصنيف بعد كل المحاولات، نعتبرها نظري كافتراضي
+                    if (!isTheory && !isPractical) isTheory = true;
+
+                    if (isTheory) pool.theory.push(crn);
+                    if (isPractical) pool.practical.push(crn);
+                };
+
+                // البحث عن الخيارات المتاحة
+                let optionsForThisCourse = [];
+                if (gsOptionsPool.length > 0) {
+                    optionsForThisCourse = gsOptionsPool.filter(gsCrn => {
+                        let d = globalCRNDetails[gsCrn];
+                        return d && (globalNormalizeCode(d.course).includes(normPlan) || normPlan.includes(globalNormalizeCode(d.course)));
+                    });
+                }
+
+                if (optionsForThisCourse.length === 0) {
+                    for (let crn in globalCRNDetails) {
+                        let d = globalCRNDetails[crn];
+                        if (globalNormalizeCode(d.course + d.name).includes(normPlan) || normPlan.includes(globalNormalizeCode(d.course))) {
+                            optionsForThisCourse.push(crn);
+                        }
+                    }
+                }
+
+                // تصنيف الخيارات المختارة
+                optionsForThisCourse.forEach(crn => processAndCategorize(crn));
+
+                // تطبيق منطق "الموازنة المستقرة" (الأكثر مقاعد أولاً)
+                const balanceSort = (list) => [...new Set(list)]
+                    .filter(c => tempRemaining[c] >= seatsNeeded)
+                    .sort((a, b) => tempRemaining[b] - tempRemaining[a]);
 
                 let reqParts = window.globalCourseRequirements[normPlan] || 1;
                 if (normPlan.includes('فيزي') || normPlan.includes('فيزياء')) reqParts = excludePhysics ? 1 : 2;
 
-                const getValidOptions = (list) => list.filter(c => tempRemaining[c] >= seatsNeeded).sort((a,b) => tempRemaining[b] - tempRemaining[a]);
-
                 if (reqParts === 2) {
-                    let tOpts = getValidOptions(pool.theory);
-                    let pOpts = getValidOptions(pool.practical);
-                    if (tOpts.length === 0 || pOpts.length === 0) missingForThisBundle.push(planCourse);
+                    let tSorted = balanceSort(pool.theory);
+                    let pSorted = balanceSort(pool.practical);
+                    if (tSorted.length === 0 || pSorted.length === 0) missingForThisBundle.push(planCourse);
                     else {
-                        requiredPicks.push({ name: planCourse + " (نظري)", options: tOpts });
-                        requiredPicks.push({ name: planCourse + " (عملي)", options: pOpts });
+                        requiredPicks.push({ name: planCourse + " (نظري)", options: tSorted });
+                        requiredPicks.push({ name: planCourse + " (عملي)", options: pSorted });
                     }
                 } else {
-                    let allOpts = getValidOptions([...new Set([...pool.theory, ...pool.practical])]);
-                    if (allOpts.length === 0) missingForThisBundle.push(planCourse);
-                    else requiredPicks.push({ name: planCourse, options: allOpts });
+                    let allSorted = balanceSort([...pool.theory, ...pool.practical]);
+                    if (allSorted.length === 0) missingForThisBundle.push(planCourse);
+                    else requiredPicks.push({ name: planCourse, options: allSorted });
                 }
             });
 
             if (missingForThisBundle.length > 0) {
-                aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>⚠️ ${prog}:</strong> نفدت مقاعد [${missingForThisBundle.join('، ')}]</div>`);
+                aiLog.push(`<div style="color:#856404; background:#fff3cd; padding:5px; border-radius:4px; margin-bottom:5px;"><strong>⚠️ ${prog}:</strong> نفدت المقاعد لـ [${missingForThisBundle.join('، ')}]</div>`);
                 break; 
             }
 
-            // === خوارزمية الذكاء الاصطناعي لاختيار أفضل جدول ===
-            let validBundles = [];
+            // === البحث عن أفضل جدول (الأكثر راحة + الأكثر توازناً) ===
+            let bestBundle = null;
+            let bestScore = Infinity;
+
             const solve = (idx, current) => {
-                // تقييد البحث بـ 100 توليفة لمنع تشنج المتصفح
-                if (validBundles.length >= 100) return; 
-                
+                if (bestBundle && idx < requiredPicks.length - 1 && idx > 3) return; // تحسين الأداء
                 if (idx === requiredPicks.length) {
-                    validBundles.push([...current]);
-                    return;
-                }
-                for (let crn of requiredPicks[idx].options) {
-                    let next = [...current, crn];
-                    if (getLinkageErrors(next).length === 0 && !checkScheduleConflicts(next).hasOverlap) {
-                        solve(idx + 1, next);
-                    }
-                }
-            };
-
-            solve(0, []); 
-            let finalBundle = null;
-
-            if (validBundles.length > 0) {
-                let bestScore = Infinity;
-                for (let bundle of validBundles) {
-                    let stats = evaluateBundleSchedule(bundle);
-                    
-                    // تقييم أساسي: الفراغات بالدقائق (يتم تصغيرها دائماً)
+                    let stats = evaluateBundleSchedule(current);
                     let score = stats.totalGaps;
-                    
-                    // إذا كان خيار 4 أيام مفعلاً والجدول يستخدم 5 أيام، تتم معاقبته برقم كبير
-                    if (prefer4Days && stats.daysUsed > 4) {
-                        score += 10000; 
-                    }
+                    if (prefer4Days && stats.daysUsed > 4) score += 10000;
                     
                     if (score < bestScore) {
                         bestScore = score;
-                        finalBundle = bundle;
+                        bestBundle = [...current];
                     }
+                    return;
                 }
-            }
 
-            if (finalBundle) {
-                generatedPackages.push({ prog: prog, cap: defaultCap, crns: finalBundle.join(' ') });
-                finalBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; });
+                // نأخذ أعلى 3 خيارات (الأكثر توفراً للمقاعد) للموازنة
+                let topOptions = requiredPicks[idx].options.slice(0, 3);
+                for (let crn of topOptions) {
+                    if (checkScheduleConflicts([...current, crn]).hasOverlap) continue;
+                    if (getLinkageErrors([...current, crn]).length > 0) continue;
+                    solve(idx + 1, [...current, crn]);
+                    if (bestScore === 0) break; 
+                }
+            };
+
+            solve(0, []);
+
+            if (bestBundle) {
+                generatedPackages.push({ prog: prog, cap: defaultCap, crns: bestBundle.join(' ') });
+                bestBundle.forEach(c => { tempRemaining[c] -= seatsNeeded; });
                 successfulPackages++;
             } else {
-                aiLog.push(`<div style="color:#d35400; background:#fef5e7; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>🚫 ${prog}:</strong> لم يجد النظام أي توليفة بدون تعارض من الخيارات المحددة.</div>`);
+                aiLog.push(`<div style="color:#d35400; background:#fef5e7; padding:5px; border-radius:4px; margin-bottom:5px;"><strong>🚫 ${prog}:</strong> تعارض زمني في رزمة ${i+1}.</div>`);
                 break;
             }
         }
-        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:8px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة بنجاح.</div>`);
+        if (successfulPackages > 0) aiLog.push(`<div style="color:#155724; background:#d4edda; padding:5px; border-radius:4px; margin-bottom:5px;"><strong>✅ ${prog}:</strong> تم إنشاء ${successfulPackages} رزمة بنجاح.</div>`);
     });
 
+    // حفظ وتحديث الواجهة
     if (generatedPackages.length > 0) {
         document.getElementById('num-packages').value = generatedPackages.length;
         localStorage.setItem('numPackages', generatedPackages.length);
-        let storageData = generatedPackages.map((p, index) => ({ id: index + 1, prog: p.prog, cap: p.cap, crns: p.crns }));
+        let storageData = generatedPackages.map((p, idx) => ({ id: idx + 1, prog: p.prog, cap: p.cap, crns: p.crns }));
         localStorage.setItem('savedPackages', JSON.stringify(storageData));
         loadPackagesFromLocal();
         saveSessionState();

@@ -702,12 +702,10 @@ async function getFromDB(key) {
 async function goToPage2() {
         const sp15File = document.getElementById('sp15File').files[0];
         const ss01File = document.getElementById('ss01File').files[0];
-        const sf33File = document.getElementById('sf33File').files[0]; 
-        const sc04File = document.getElementById('sc04File').files[0]; 
         const status = document.getElementById('status-1');
         
-        if (!sp15File || !ss01File || !sf33File || !sc04File) { 
-        status.innerText = '⚠️ عذراً، يجب إرفاق كافة التقارير الأربعة (SP15, SS01, SF33, SC04) لضمان دقة الإسناد الآلي.'; 
+        if (!sp15File || !ss01File) { 
+        status.innerText = '⚠️ يجب إرفاق تقرير قائمة المستجدين (SP15) وتقرير جداول الوحدة (SS01) على الأقل.'; 
         return; 
     }
 
@@ -1408,7 +1406,7 @@ let programGSMapping = {};
     // 1. الدالة الوسيطة لبدء عملية التوليد (تُستدعى من زر التوليد الآلي)
 function prepareAutoGen() {
     if (!isSc04Attached) {
-        showToast("⚠️ يجب إرفاق تقرير الخطط (SC04) أولاً لتحديد مواد المستوى الأول");
+        showToast("⚠️ ميزة التوليد الآلي تتطلب إرفاق ملف الخطة (SC04) لمعرفة المقررات المطلوبة.");
         return;
     }
     const isGSEnabled = document.getElementById('enable-general-studies').checked;

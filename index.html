@@ -1164,7 +1164,7 @@ function handleCRNInput(event, pkgId) {
 
   function savePackagesToLocal() {
     let pkgs = [];
-    // نقرأ العناصر الموجودة فعلياً في الواجهة لتفادي أي أخطاء أثناء الإضافة أو الحذف
+    let globalPkgs = []; 
     for (let i = 1; i <= 200; i++) {
         let prog = document.getElementById(`pkg-program-${i}`);
         let cap = document.getElementById(`pkg-capacity-${i}`);
@@ -1177,12 +1177,23 @@ function handleCRNInput(event, pkgId) {
                 cap: cap.value, 
                 crns: crns.value 
             });
+            
+            let crnsArray = crns.value.split(/[\s,،]+/).filter(c => c.trim() !== "");
+            globalPkgs.push({
+                id: i,
+                program: prog.value,
+                maxCapacity: parseInt(cap.value) || 20,
+                currentCount: 0,
+                crns: crnsArray
+            });
         }
     }
     
     if (pkgs.length > 0) {
         localStorage.setItem('savedPackages', JSON.stringify(pkgs));
-    }
+        localStorage.setItem('numPackages', pkgs.length);
+        packagesData = globalPkgs; 
+        }
 }
 
   // 1. دالة إضافة رزمة جديدة عبر الزر (+)
@@ -1289,11 +1300,10 @@ function fillPackageData() {
 function deletePackage(pkgIdToRemove) {
     if (!confirm(`هل أنت متأكد من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
 
-    savePackagesToLocal(); // حفظ البيانات الحالية قبل الحذف
+    savePackagesToLocal(); 
     let currentPackages = JSON.parse(localStorage.getItem('savedPackages')) || [];
-    currentPackages.splice(pkgIdToRemove - 1, 1); // إزالة الرزمة المحددة
+    currentPackages.splice(pkgIdToRemove - 1, 1); 
     
-    // إعادة ترتيب المعرفات (ID) لتظل متسلسلة
     currentPackages.forEach((pkg, index) => pkg.id = index + 1);
     
     let newNum = currentPackages.length;
@@ -1306,12 +1316,10 @@ function deletePackage(pkgIdToRemove) {
     localStorage.setItem('numPackages', newNum);
     localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
 
-    // استدعاء إعادة الرسم والتعبئة مباشرة بدلاً من دالة handleNumPackagesChange
-    // حتى لا يتم مسح المصفوفة التي قمنا بتعديلها للتو
     generatePackageCards(); 
     fillPackageData(); 
-    
-    saveSessionState();
+    savePackagesToLocal();
+    saveSessionState(); 
     showToast("🗑️ تم حذف الرزمة بنجاح");
 }
 

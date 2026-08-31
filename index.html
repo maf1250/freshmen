@@ -1162,27 +1162,26 @@ function handleCRNInput(event, pkgId) {
         saveSessionState();
     }
 
-   function savePackagesToLocal() {
-    const num = parseInt(document.getElementById('num-packages').value) || 1;
+  function savePackagesToLocal() {
     let pkgs = [];
-    for (let i = 1; i <= num; i++) {
+    // نقرأ العناصر الموجودة فعلياً في الواجهة لتفادي أي أخطاء أثناء الإضافة أو الحذف
+    for (let i = 1; i <= 200; i++) {
         let prog = document.getElementById(`pkg-program-${i}`);
         let cap = document.getElementById(`pkg-capacity-${i}`);
         let crns = document.getElementById(`pkg-crns-${i}`);
-        if (prog) {
+        
+        if (prog && cap && crns) {
             pkgs.push({ 
                 id: i, 
-                program: prog.value, 
-                maxCapacity: parseInt(cap.value), 
-                crns: crns.value.split(/[\s,،]+/).filter(c => c.trim() !== "") 
+                prog: prog.value, 
+                cap: cap.value, 
+                crns: crns.value 
             });
         }
     }
+    
     if (pkgs.length > 0) {
         localStorage.setItem('savedPackages', JSON.stringify(pkgs));
-        localStorage.setItem('numPackages', pkgs.length);
-        
-        packagesData = pkgs; 
     }
 }
 
@@ -1290,24 +1289,30 @@ function fillPackageData() {
 function deletePackage(pkgIdToRemove) {
     if (!confirm(`هل أنت متأكد من حذف الرزمة رقم ${pkgIdToRemove}؟`)) return;
 
-    savePackagesToLocal();
+    savePackagesToLocal(); // حفظ البيانات الحالية قبل الحذف
     let currentPackages = JSON.parse(localStorage.getItem('savedPackages')) || [];
-    currentPackages.splice(pkgIdToRemove - 1, 1);
+    currentPackages.splice(pkgIdToRemove - 1, 1); // إزالة الرزمة المحددة
     
-    // إعادة ترتيب المعرفات
+    // إعادة ترتيب المعرفات (ID) لتظل متسلسلة
     currentPackages.forEach((pkg, index) => pkg.id = index + 1);
     
     let newNum = currentPackages.length;
-    if (newNum < 1) newNum = 1;
+    if (newNum < 1) {
+        newNum = 1;
+        currentPackages = [{ id: 1, prog: "", cap: "20", crns: "" }];
+    }
 
     document.getElementById('num-packages').value = newNum;
     localStorage.setItem('numPackages', newNum);
     localStorage.setItem('savedPackages', JSON.stringify(currentPackages));
 
-    savePackagesToLocal();
-    handleNumPackagesChange(); // إعادة الرسم بالعدد الجديد
+    // استدعاء إعادة الرسم والتعبئة مباشرة بدلاً من دالة handleNumPackagesChange
+    // حتى لا يتم مسح المصفوفة التي قمنا بتعديلها للتو
+    generatePackageCards(); 
+    fillPackageData(); 
+    
     saveSessionState();
-    showToast("🗑️ تم حذف الرزمة");
+    showToast("🗑️ تم حذف الرزمة بنجاح");
 }
 
  function loadPackagesFromLocal() {

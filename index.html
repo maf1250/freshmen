@@ -932,6 +932,11 @@ if (isSc04Attached) {
 
         let warnings = [];
 
+        const sf33Input = document.getElementById('sf33File');
+        if (!sf33Input || sf33Input.files.length === 0) {
+            warnings.push(`لم يتم إرفاق تقرير الشعب والشعب المرتبطة (SF33). النظام سيعمل، لكن قد يحصل تداخل في الشعب وأخطاء في التسجيل في حال كانت الوحدة تطبق الارتباط الفردي (L1, L2, L3...).`);
+        }
+        
         // فحص وجود الخطة
         if (!isSc04Attached) {
             warnings.push(`لم يتم إرفاق ملف الخطة التدريبية (SC04). النظام سيعمل، لكن لن يوضح حالة اكتمال الجداول.`);

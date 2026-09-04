@@ -679,7 +679,7 @@ async function getFromDB(key) {
         });
         
         document.getElementById('ss01File').addEventListener('change', function() { 
-            validateFileHeaders(this, [['الرقم المرجعي', 'نوع الجدولة'], ['كل من الاستجابة الصوتية والخدمة الذاتية متاح', 'جزء الفصل'], ['المقرر', 'اليوم']], 'الجدول (SS01)'); 
+            validateFileHeaders(this, [['الرقم المرجعي', 'جزء الفصل' ,'نوع الجدولة'], ['المقرر', 'كل من الاستجابة الصوتية والخدمة الذاتية متاح' ,'اليوم']], 'الجدول (SS01)'); 
             resetPackagesOnNewFile(); 
         });
 
